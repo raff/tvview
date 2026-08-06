@@ -40,7 +40,10 @@ The bundle carries no resources — the webview library and the default
 `channels.yaml` are both compiled in. It exists for what a bare binary cannot
 have: a real name in the menubar (`CFBundleName`, so the application menu reads
 *TV View* rather than `tvview`), a Dock icon, and no terminal window behind it.
-Drop an `icon.icns` beside the `Makefile` and it is picked up automatically.
+
+`icon.icns` in the project root is a **placeholder** — a generated squircle with
+a play mark. Replace that one file with a real icon and rebuild; nothing else
+needs touching, and the `Info.plist` already points at it.
 
 `make universal` compiles each architecture separately before `lipo` joins them:
 go-webview selects its embedded native library by `GOARCH` at compile time, so

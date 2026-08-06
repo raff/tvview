@@ -58,8 +58,13 @@ bundle:
 	printf 'APPL????' > $(CONTENTS)/PkgInfo
 	echo "$$INFO_PLIST" > $(CONTENTS)/Info.plist
 	@plutil -lint $(CONTENTS)/Info.plist
-	@# Drop an icon.icns beside the Makefile and it is picked up here.
-	@test -f icon.icns && cp icon.icns $(CONTENTS)/Resources/AppIcon.icns || true
+	@# icon.icns in the project root is a placeholder; replace that file and
+	@# rebuild to change the icon. Nothing else needs touching.
+	@if [ -f icon.icns ]; then \
+		cp icon.icns $(CONTENTS)/Resources/AppIcon.icns; \
+	else \
+		echo "note: no icon.icns found, the bundle gets the generic icon"; \
+	fi
 	@# Ad-hoc signature. Enough for this machine; not a distributable one —
 	@# other Macs still need a Developer ID and notarisation.
 	codesign --force --sign - $(APP)
