@@ -55,7 +55,17 @@ func main() {
 	w := webview.New(*debug)
 	defer w.Destroy()
 
-	a := &app{w: w, cfg: cfg, current: cfg.Channels[0].URL}
+	start := cfg.Channels[0].URL
+	if last := loadLastChannel(); last != "" {
+		for _, c := range cfg.Channels {
+			if c.URL == last {
+				start = last
+				break
+			}
+		}
+	}
+
+	a := &app{w: w, cfg: cfg, current: start}
 
 	if err := a.bind(); err != nil {
 		log.Fatal("tvview: ", err)
@@ -70,8 +80,8 @@ func main() {
 	}
 
 	w.SetSize(cfg.Window.Width, cfg.Window.Height, webview.HintNone)
-	w.SetTitle(a.windowTitle(cfg.Channels[0].URL))
-	w.Navigate(cfg.Channels[0].URL)
+	w.SetTitle(a.windowTitle(start))
+	w.Navigate(start)
 	w.Run()
 }
 
@@ -117,10 +127,30 @@ func (a *app) inject() error {
 	return nil
 }
 
+// stepChannel moves to the next (delta 1) or previous (delta -1) channel,
+// wrapping around the ends of the list.
+func (a *app) stepChannel(delta int) {
+	channels := a.cfg.Channels
+	a.mu.Lock()
+	i := 0
+	for j, c := range channels {
+		if c.URL == a.current {
+			i = j
+			break
+		}
+	}
+	i = (i + delta + len(channels)) % len(channels)
+	a.mu.Unlock()
+
+	a.selectChannel(channels[i].URL)
+}
+
 func (a *app) selectChannel(url string) {
 	a.mu.Lock()
 	a.current = url
 	a.mu.Unlock()
+
+	saveLastChannel(url)
 
 	// Never navigate from inside the binding callback.
 	a.w.Dispatch(func() {

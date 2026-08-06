@@ -202,6 +202,9 @@ func installMenuBar(a *app) error {
 
 	// Channels. Cmd-1..Cmd-9 for the first nine; the rest are click-only.
 	channelsMenu = newMenu("Channels")
+	addAction(channelsMenu, target, "Channel Up", "]", 0, func() { a.stepChannel(1) })
+	addAction(channelsMenu, target, "Channel Down", "[", 0, func() { a.stepChannel(-1) })
+	addSeparator(channelsMenu)
 	channelItems = make([]objc.ID, 0, len(a.cfg.Channels))
 	for i, c := range a.cfg.Channels {
 		key := ""

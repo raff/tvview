@@ -135,6 +135,46 @@ func seedUserConfig() (string, error) {
 	return path, nil
 }
 
+// lastChannelPath is where the most recently viewed channel's URL is
+// remembered across restarts, or "" when there is nowhere to put it.
+func lastChannelPath() string {
+	dir := userConfigDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "last_channel")
+}
+
+// loadLastChannel returns the previously saved channel URL, or "" if none was
+// saved yet or it can't be read.
+func loadLastChannel() string {
+	path := lastChannelPath()
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// saveLastChannel remembers url for next launch. Failures are not fatal to a
+// channel switch, so they're only logged.
+func saveLastChannel(url string) {
+	path := lastChannelPath()
+	if path == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "tvview: could not save last channel:", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(url), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "tvview: could not save last channel:", err)
+	}
+}
+
 func parseConfig(data []byte, path string) (*Config, error) {
 	cfg := &Config{Path: path}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
