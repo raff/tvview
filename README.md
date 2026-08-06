@@ -77,9 +77,11 @@ channels:
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 ```
 
-Sidebar order follows file order, and the first channel is what loads on startup.
-Entries without a `url` are skipped; an entry without a `title` falls back to
-showing its URL.
+Sidebar order follows file order. On startup the app reopens whichever channel
+was last viewed — see *Remembering the last channel* below — falling back to
+the first entry when there is no saved channel, or it no longer matches one in
+the file. Entries without a `url` are skipped; an entry without a `title`
+falls back to showing its URL.
 
 The config is looked up in this order, first hit wins:
 
@@ -110,6 +112,16 @@ a *Reveal Config in Finder* menu item would be the natural next step.
 
 Changes take effect on restart.
 
+### Remembering the last channel
+
+The URL of the current channel is written to
+`$XDG_CONFIG_HOME/tvview/last_channel` (defaults to
+`~/.config/tvview/last_channel`) every time it changes, and read back on the
+next launch. It's a bare text file, not part of `channels.yaml`, since it's
+runtime state rather than something you'd hand-edit. A write failure — no home
+directory, read-only disk — is logged to stderr and otherwise ignored; it just
+means the next launch starts from the first channel again.
+
 ## Using it
 
 | Action           | How                                                        |
@@ -117,6 +129,7 @@ Changes take effect on restart.
 | Open/close       | Click **☰** (top left), **F9**, or **Cmd-`\`**              |
 | Close            | **Esc**                                                     |
 | Switch channel   | Click an entry, or **Cmd-1**…**Cmd-9**                      |
+| Next/previous channel | **Cmd-]** / **Cmd-[**                                  |
 | Quit             | **Cmd-Q** twice, or **Quit** in the menu (immediate)        |
 
 The toggle button sits at 22% opacity when idle so it doesn't cover video, and
@@ -250,7 +263,9 @@ host page's CSS and the sidebar's cannot reach each other.
 
 Since each page load re-runs the script from scratch, the JS side owns no durable
 state. Go does: `wvState()` is a bound function the sidebar calls on load to
-restore which channel is active and whether the panel was open.
+restore which channel is active and whether the panel was open. `a.current`
+itself starts from `last_channel` on disk (see *Remembering the last channel*),
+so the same mechanism that survives a navigation also survives a restart.
 
 ```
 click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ──▶ w.Navigate(url)
