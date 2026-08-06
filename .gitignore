@@ -8,3 +8,6 @@ wv
 /tvview-amd64
 /tvview-arm64
 /tvview-universal
+
+# macOS
+.DS_Store
