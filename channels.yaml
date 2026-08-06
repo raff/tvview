@@ -1,0 +1,31 @@
+# tvview — channel list
+#
+# Edit this file to change the channels shown in the sidebar.
+# Restart the app to pick up changes.
+#
+# Config is looked up in this order:
+#   1. -config <path>
+#   2. ./channels.yaml
+#   3. $XDG_CONFIG_HOME/tvview/channels.yaml  (default: ~/.config/tvview/channels.yaml)
+#   4. built-in defaults
+
+window:
+  title: TV View
+  width: 1200
+  height: 900
+
+channels:
+  - title: PBS
+    url: https://www.pbs.org
+
+  - title: NASA+
+    url: https://plus.nasa.gov/scheduled-video/nasa-tv/
+
+  - title: Al Jazeera
+    url: https://www.aljazeera.com/live
+
+  - title: DW News
+    url: https://www.dw.com/en/live-tv/channel-english
+
+  - title: France 24
+    url: https://www.france24.com/en/live

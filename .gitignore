@@ -1,0 +1,4 @@
+wv
+
+# go build with no -o drops the binary here, next to the source
+/tvview
