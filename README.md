@@ -28,6 +28,27 @@ On Windows, build with `-ldflags="-H windowsgui"` to suppress the console window
 Prebuilt native webview libraries for macOS, Linux and Windows (amd64/arm64) are
 embedded in the binary, so there is nothing else to install or ship.
 
+### The macOS bundle
+
+```bash
+make app        # TVView.app for this machine
+make universal  # one bundle for both Intel and Apple Silicon
+make install    # copy it to /Applications
+```
+
+The bundle carries no resources — the webview library and the default
+`channels.yaml` are both compiled in. It exists for what a bare binary cannot
+have: a real name in the menubar (`CFBundleName`, so the application menu reads
+*TV View* rather than `tvview`), a Dock icon, and no terminal window behind it.
+Drop an `icon.icns` beside the `Makefile` and it is picked up automatically.
+
+`make universal` compiles each architecture separately before `lipo` joins them:
+go-webview selects its embedded native library by `GOARCH` at compile time, so
+each slice has to be a finished binary carrying its own.
+
+Both targets ad-hoc sign the result (`codesign --sign -`), which is enough to run
+it here. Distributing to other Macs still needs a Developer ID and notarisation.
+
 ### Flags
 
 | Flag      | Description                                                    |
@@ -190,16 +211,17 @@ path F9 already used, with no second copy of the truth.
 
 Two notes on what macOS overrides:
 
-- The **application menu is titled from the process name** (`tvview`), not from
-  what we pass. That is a bundling matter, not a menu one — see below. Item
-  titles like *Quit TV View* are ours and do use `window.title`.
+- The **application menu is titled from the bundle, not from what we pass**. Run
+  as a bare binary it shows the process name, `tvview`; from `TVView.app` it
+  shows `CFBundleName`, *TV View*. Item titles like *Quit TV View* are ours
+  either way and do use `window.title` — keep the two strings in step.
 - **Enter Full Screen** is declared as Ctrl-Cmd-F but the system rebinds it to
   its own globe/fn-F default.
 
-**Bundling as `tvview.app` is still worth doing, and remains orthogonal.** A
-bundle gives a real app name in the menubar instead of `argv[0]`, a Dock icon,
-no terminal window, and proper Cmd-Tab behaviour. It has never been what
-produces the menu.
+**Bundling remains orthogonal**, and `make app` now does it: the bundle supplies
+the app *name* in the menubar via `CFBundleName`, a Dock icon, no terminal
+window, and proper Cmd-Tab behaviour. It has never been what produces the menu
+itself.
 
 One caveat: `terminate:` ends the process without unwinding `main`, so the
 deferred `w.Destroy()` never runs. That is ordinary macOS app behaviour and
@@ -244,6 +266,7 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `menu_darwin.go`| The macOS menubar, built with `purego/objc`                 |
 | `quit_darwin.go`| Two-press Cmd-Q and its prompt window                       |
 | `menu_other.go` | Deliberate no-op elsewhere                                  |
+| `Makefile`      | Builds `TVView.app`, thin or universal                      |
 
 ### Bindings exposed to the page
 

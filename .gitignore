@@ -2,3 +2,9 @@ wv
 
 # go build with no -o drops the binary here, next to the source
 /tvview
+
+# make app / make universal
+/TVView.app/
+/tvview-amd64
+/tvview-arm64
+/tvview-universal
