@@ -18,6 +18,12 @@ channels:
   - title: PBS
     url: https://www.pbs.org
 
+  - title: Pluto TV
+    url: https://pluto.tv/
+
+  - title: Tubi
+    url: https://tubitv.com/
+
   - title: NASA+
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 
