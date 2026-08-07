@@ -130,6 +130,7 @@ means the next launch starts from the first channel again.
 | Close            | **Esc**                                                     |
 | Switch channel   | Click an entry, or **Cmd-1**…**Cmd-9**                      |
 | Next/previous channel | **Cmd-]** / **Cmd-[**                                  |
+| Reload page      | **Cmd-R** (reloads in place — you keep what you're watching) |
 | Quit             | **Cmd-Q** twice, or **Quit** in the menu (immediate)        |
 
 The toggle button sits at 22% opacity when idle so it doesn't cover video, and
@@ -206,6 +207,19 @@ selected. AppKit also injects its own extras into menus it recognises by title �
 Dictation and Emoji & Symbols into Edit, tab commands into View, the window list
 and tiling commands into Window. Its items come *first*, so ours are not at the
 index you would expect.
+
+**Reload** (Cmd-R) sends `WKWebView`'s own `-reload` to the web view, found by
+walking down from the window's content view. That reloads *the page you are on*,
+wherever inside the site you had navigated to — Cmd-R is for unsticking a player
+mid-show, so re-navigating to the channel's URL would throw away the very thing
+you were watching. Being native, it also does not need the page's JavaScript to
+still be running, which when a player has wedged it often is not.
+
+It does not use `reload:` down the responder chain, the way the Edit menu works.
+That chain starts at the first responder, so until something in the page has
+been clicked it runs window → delegate → NSApp and never reaches the web view,
+leaving the item greyed out. Messaging the view directly works whatever holds
+focus.
 
 **Show/Hide Sidebar** (Cmd-`\`) and the **Channels** list (Cmd-1 … Cmd-9) have
 no AppKit equivalent, so they need something real on the ObjC side to be

@@ -45,6 +45,12 @@ var (
 	selSetState           = objc.RegisterName("setState:")
 	selSetDelegate        = objc.RegisterName("setDelegate:")
 
+	selReload        = objc.RegisterName("reload")
+	selSubviews      = objc.RegisterName("subviews")
+	selCount         = objc.RegisterName("count")
+	selObjectAtIndex = objc.RegisterName("objectAtIndex:")
+	selIsKindOfClass = objc.RegisterName("isKindOfClass:")
+
 	// Implemented by our own target class, below.
 	selMenuAction      = objc.RegisterName("tvviewMenuAction:")
 	selMenuNeedsUpdate = objc.RegisterName("menuNeedsUpdate:")
@@ -194,6 +200,8 @@ func installMenuBar(a *app) error {
 	// reached down the responder chain — the window's fullscreen, not the
 	// player's.
 	viewMenu = newMenu("View")
+	addAction(viewMenu, target, "Reload", "r", 0, a.reload)
+	addSeparator(viewMenu)
 	sidebarItem = addAction(viewMenu, target, "Show Sidebar", `\`, 0, a.toggleSidebar)
 	addSeparator(viewMenu)
 	addItem(viewMenu, "Enter Full Screen", "toggleFullScreen:", "f", modControl|modCommand)
@@ -230,6 +238,67 @@ func installMenuBar(a *app) error {
 	app.Send(selSetMainMenu, main)
 	app.Send(selSetWindowsMenu, windowMenu)
 	return nil
+}
+
+// reload reloads whatever page is on screen, in place.
+//
+// This is WKWebView's own -reload, not a re-navigation to the channel's URL:
+// Cmd-R is for unsticking a player mid-show, and re-navigating would throw away
+// wherever you had got to inside the site. Being native, it also does not care
+// whether the page's own JavaScript is still running — which, when the player
+// has wedged, it very often is not.
+//
+// The item is wired to this rather than to WKWebView's reload: down the
+// responder chain. That chain starts at the first responder, so before anything
+// in the page has been clicked it runs window → delegate → NSApp and never
+// reaches the web view at all, leaving the item greyed out. Messaging the view
+// directly works whatever holds focus.
+//
+// If the view cannot be found the channel is re-navigated instead, which at
+// least reloads something.
+func (a *app) reload() {
+	a.w.Dispatch(func() {
+		if view := a.webView(); view != 0 {
+			view.Send(selReload)
+			return
+		}
+
+		a.mu.Lock()
+		url := a.current
+		a.mu.Unlock()
+		a.w.Navigate(url)
+	})
+}
+
+// webView finds the WKWebView inside the window, or 0. go-webview makes it the
+// content view, but that is its business and not a promise, so this searches
+// the view tree rather than assuming a depth.
+func (a *app) webView() objc.ID {
+	classWebView := objc.GetClass("WKWebView")
+	window := objc.ID(uintptr(a.w.Window()))
+	if classWebView == 0 || window == 0 {
+		return 0
+	}
+
+	var find func(view objc.ID) objc.ID
+	find = func(view objc.ID) objc.ID {
+		if view == 0 {
+			return 0
+		}
+		if objc.Send[bool](view, selIsKindOfClass, objc.ID(classWebView)) {
+			return view
+		}
+
+		subviews := view.Send(selSubviews)
+		for i, n := 0, objc.Send[int](subviews, selCount); i < n; i++ {
+			if found := find(subviews.Send(selObjectAtIndex, i)); found != 0 {
+				return found
+			}
+		}
+		return 0
+	}
+
+	return find(window.Send(selContentView))
 }
 
 // newMenuTarget registers the class that receives our own menu items' clicks
