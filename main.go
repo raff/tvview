@@ -79,6 +79,12 @@ func main() {
 		log.Fatal("tvview: ", err)
 	}
 
+	// Before the first Navigate, and before anything can go fullscreen: the
+	// web view needs a container to be pulled out of and put back into.
+	if !a.hostWebView() {
+		fmt.Fprintln(os.Stderr, "tvview: could not re-home the web view; fullscreen may leave the window wrong")
+	}
+
 	// Before the first Navigate: the User-Agent is read as the page loads.
 	// Not fatal if it does not take — the app is still usable, just back to
 	// stalling on the channels that made us want this.

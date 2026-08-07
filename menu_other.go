@@ -11,3 +11,7 @@ func installMenuBar(*app) error { return nil }
 // for this, but go-webview does not expose the underlying widget on those
 // platforms the way NSWindow's view tree lets us find the WKWebView.
 func (*app) setUserAgent(string) bool { return false }
+
+// hostWebView is a no-op off macOS. The contentView problem it solves is
+// specific to how WebKit takes an element fullscreen on the Mac.
+func (*app) hostWebView() bool { return false }

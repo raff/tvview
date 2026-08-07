@@ -222,6 +222,23 @@ a player; **F9** and **Esc** do not. See *Quitting, and the menubar* below.
 There is no app-level fullscreen. Use the player's own fullscreen button on the
 page — PBS and most channel players have one.
 
+The web view does not sit directly in the window. `go-webview` makes the
+`WKWebView` the window's `contentView`, and that arrangement does not survive an
+element fullscreen: WebKit implements it by pulling the web view out of its
+superview, parking it in a window of its own, and putting it back afterwards.
+`removeFromSuperview` on a contentView sets the window's `contentView` to **nil**,
+and WebKit restores the view by re-adding it to the superview it remembered,
+never by calling `setContentView:` again. The window therefore came back from
+fullscreen with no content view at all — the title collapsed onto the traffic
+lights, the close button became unclickable, and the page stayed frozen at its
+old size in the bottom-left corner while the window resized around it.
+
+`hostWebView` (`fullscreen_darwin.go`) puts a plain `NSView` in between at
+startup, so what WebKit removes and restores is an ordinary subview. The
+contentView is the container and never moves, and the web view carries
+`NSViewWidthSizable|NSViewHeightSizable` — a property of the view, so it
+survives the round-trip — which keeps it filling the container.
+
 This works because the embedded `libwebview` (0.12.0) sets `fullScreenEnabled`
 on the macOS `WKPreferences` at startup, so the page's `requestFullscreen()`
 calls succeed. WebView2 and WebKitGTK support the API natively. Nothing in the
@@ -386,6 +403,7 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `menu_darwin.go`| The macOS menubar, built with `purego/objc`                 |
 | `quit_darwin.go`| Two-press Cmd-Q and its prompt window                       |
 | `useragent_darwin.go` | `-setCustomUserAgent:` on the `WKWebView`             |
+| `fullscreen_darwin.go` | The container that lets the web view survive fullscreen |
 | `menu_other.go` | Deliberate no-ops elsewhere                                 |
 | `Makefile`      | Builds `TVView.app`, thin or universal                      |
 
