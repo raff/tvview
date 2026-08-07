@@ -112,6 +112,51 @@ a *Reveal Config in Finder* menu item would be the natural next step.
 
 Changes take effect on restart.
 
+### User agent
+
+Streaming sites choose which player and which stream to serve you from the
+`User-Agent` header, and `WKWebView`'s own string is not Safari's — so a site
+can hand us a media path that Safari itself would never take. That is what made
+some shows play their ads and then stall at the first frame of the programme.
+
+So the web view claims to be Safari by default:
+
+```
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15
+```
+
+The engine underneath really is Safari's, so this is a truthful enough claim as
+these things go. Override it with a top-level `user_agent` key:
+
+```yaml
+user_agent: >-
+  Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
+  (KHTML, like Gecko) Version/26.5 Safari/605.1.15
+```
+
+`>-` folds the following lines into one space-joined string, which is only there
+to keep the line readable — a single long line works just as well.
+
+The default lives in `config.go` as `defaultUserAgent`, and the seeded
+`channels.yaml` carries the same string as an editable copy. **Absent or empty
+means the default**, not the stock web view string, so a `channels.yaml` written
+before this existed still gets the fix without being edited.
+
+If a site is still unhappy, give it Safari's exact string from this machine —
+Safari ▸ Develop ▸ Show Web Inspector, then `navigator.userAgent`. Only
+`Version/` tracks the Safari release; the `AppleWebKit/605.1.15` token has been
+frozen for years and sites care far less about it than about the word `Safari`
+appearing at all.
+
+The override applies to the top document *and* to every iframe under it, which
+is the part that matters — the player is usually somebody else's frame. It is
+set once before the first navigation, since a page that has already asked who we
+are will not ask again. Run with `-debug` to see the string on stderr.
+
+macOS only: it goes through `WKWebView`'s `-setCustomUserAgent:`, and
+`menu_other.go` no-ops it elsewhere. A failure to apply it is a line on stderr,
+not a refusal to start.
+
 ### Remembering the last channel
 
 The URL of the current channel is written to
@@ -297,7 +342,8 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `channels.yaml` | Default channel list. Embedded *and* the file you edit      |
 | `menu_darwin.go`| The macOS menubar, built with `purego/objc`                 |
 | `quit_darwin.go`| Two-press Cmd-Q and its prompt window                       |
-| `menu_other.go` | Deliberate no-op elsewhere                                  |
+| `useragent_darwin.go` | `-setCustomUserAgent:` on the `WKWebView`             |
+| `menu_other.go` | Deliberate no-ops elsewhere                                 |
 | `Makefile`      | Builds `TVView.app`, thin or universal                      |
 
 ### Bindings exposed to the page

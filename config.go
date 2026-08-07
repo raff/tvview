@@ -18,6 +18,20 @@ import (
 //go:embed channels.yaml
 var defaultConfig []byte
 
+// defaultUserAgent is what the web view claims to be when the config does not
+// say otherwise. It is Safari's string, and it is deliberately Safari's:
+// streaming sites branch hard on the User-Agent, and the stock WKWebView one
+// is not Safari's, so they hand us the media path that stalls (see NOTES.md).
+// The engine underneath really is Safari's, so this is a truthful enough claim
+// as these things go.
+//
+// The AppleWebKit token has been frozen at 605.1.15 for years; only Version/
+// tracks the Safari release, and sites care about it far less than about the
+// word "Safari" being there at all. Override user_agent in the config to match
+// this machine exactly.
+const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+	"AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15"
+
 // Channel is one entry in the sidebar. Fields added here are automatically
 // available to the sidebar UI via the JSON tags.
 type Channel struct {
@@ -36,6 +50,11 @@ type WindowConfig struct {
 type Config struct {
 	Window   WindowConfig `yaml:"window"   json:"window"`
 	Channels []Channel    `yaml:"channels" json:"channels"`
+
+	// UserAgent is what the web view reports to sites. Empty means
+	// defaultUserAgent — an older config with no user_agent key still gets
+	// the current default rather than the stock WKWebView string.
+	UserAgent string `yaml:"user_agent" json:"user_agent"`
 
 	// Path is where the config was read from, or "" when the built-in
 	// defaults were used. Not part of the file itself.
@@ -189,6 +208,11 @@ func parseConfig(data []byte, path string) (*Config, error) {
 	}
 	if cfg.Window.Height <= 0 {
 		cfg.Window.Height = 900
+	}
+
+	cfg.UserAgent = strings.TrimSpace(cfg.UserAgent)
+	if cfg.UserAgent == "" {
+		cfg.UserAgent = defaultUserAgent
 	}
 
 	channels := cfg.Channels[:0]

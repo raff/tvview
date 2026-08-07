@@ -327,7 +327,14 @@ func newMenuTarget() (objc.ID, error) {
 
 // nsString bridges a Go string to an autoreleased NSString. purego converts
 // the string argument to a C string and keeps it alive across the call.
+//
+// It resolves NSString itself if installMenuBar has not run yet, so callers
+// outside the menu bar do not have to care about that ordering. Still no good
+// before the webview is created — that is what brings AppKit into the process.
 func nsString(s string) objc.ID {
+	if classString == 0 {
+		classString = objc.GetClass("NSString")
+	}
 	return objc.ID(classString).Send(selStringWithUTF8, s)
 }
 

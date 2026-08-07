@@ -1,13 +1,29 @@
 # Open issues
 
-1. [Playback stalls at the start of the show](#1-playback-stalls-at-the-start-of-the-show) — the pressing one.
-2. [What Cmd-R should reload](#2-what-cmd-r-should-reload)
+1. [What Cmd-R should reload](#2-what-cmd-r-should-reload)
+
+Fixed, kept for the reasoning:
+
+1. [Playback stalls at the start of the show](#1-playback-stalls-at-the-start-of-the-show)
 
 ---
 
 # 1. Playback stalls at the start of the show
 
-Status: to debug. Nothing tried yet.
+Status: **fixed.** It was the user agent — hypothesis 1, the first and cheapest
+guess. We were sending `WKWebView`'s own string, which is not Safari's, and the
+sites were serving us the media path they serve everything non-Safari. Claiming
+to be Safari makes shows play straight through the ad boundary.
+
+The string is now `defaultUserAgent` in `config.go`, overridable per-machine
+with `user_agent` in `channels.yaml`; see the README. Everything below is the
+reasoning that got there, kept because the shape of the bug is worth
+recognising again.
+
+**If it comes back** — a site tightens its sniffing, or macOS moves far enough
+that `Version/26.5` reads as implausible — the first move is to put Safari's
+current exact string in the config, which needs no rebuild. If that does not do
+it, the hypotheses below resume at number 2.
 
 ## The symptom
 
@@ -37,12 +53,12 @@ it to whatever is special about the content stream.
 
 ## Hypotheses, most likely first
 
-1. **User agent.** Ours is the stock `WKWebView` string, which is not Safari's.
-   Sites branch hard on this — serving DASH + Widevine to anything
-   Chrome-shaped and HLS + FairPlay to Safari. If PBS decides we are not Safari,
-   it may hand us the exact path that fails in Chrome. This would explain the
-   Chrome/TVView-vs-Safari split in one stroke, and it is the cheapest thing to
-   test.
+1. **User agent — this was it.** Ours was the stock `WKWebView` string, which is
+   not Safari's. Sites branch hard on this — serving DASH + Widevine to anything
+   Chrome-shaped and HLS + FairPlay to Safari. PBS decided we were not Safari
+   and handed us the exact path that fails in Chrome. It explained the
+   Chrome/TVView-vs-Safari split in one stroke, which is why it was worth
+   testing first even though it was also the cheapest to test.
 2. **DRM/EME not available to us.** FairPlay in a `WKWebView` is not simply
    Safari's — it depends on how the app is built and signed, and we are an
    unsigned binary loading a prebuilt `libwebview`. If the key-system request
@@ -57,7 +73,13 @@ it to whatever is special about the content stream.
 licence — rather than at anything static, and may be the most informative thread
 of all. Note what was different, if it ever works again.
 
-## How to debug it
+*In hindsight:* the DRM hypothesis was the more interesting one and would have
+cost a day. The boring guess won, and the tell was in the table above all along
+— Chrome and TVView failing together against Safari is a sniffing story, not a
+capability story. Two things that differ from the working case in the same way
+usually differ for the same reason.
+
+## How to debug it, if it returns
 
 Run with dev tools and watch the ad→content boundary:
 
@@ -81,13 +103,21 @@ In the console, at the moment it stalls:
 Then do the same in Safari's Web Inspector on the same episode, and diff the
 two. The first difference that appears before the stall is the answer.
 
-## Cheap experiment to try first
+## The fix
 
-Overriding the user agent is a two-line change with the plumbing already in
-place: `(*app).webView` in `menu_darwin.go` already hands back the `WKWebView`,
-and it takes `setCustomUserAgent:`. Point it at the string Safari sends on this
-machine, reload, and see whether the show plays. If it does, hypothesis 1 is
-confirmed and the fix is a config knob rather than an investigation.
+Overriding the user agent turned out to be the two-line change it looked like:
+`(*app).webView` in `menu_darwin.go` already handed back the `WKWebView`, and it
+takes `setCustomUserAgent:`. That is now `useragent_darwin.go`, fed by
+`Config.UserAgent` and defaulting to `defaultUserAgent` in `config.go`.
+
+The config knob shipped alongside the experiment rather than after it, which is
+what makes the "if it comes back" note above a config edit rather than a
+rebuild.
+
+To see what is actually being sent without opening dev tools, point a channel at
+a local server that echoes the `User-Agent` header back; that is how the
+plumbing was checked, top document and iframe both. `-debug` also prints the
+string on stderr at startup.
 
 ---
 

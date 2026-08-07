@@ -79,6 +79,15 @@ func main() {
 		log.Fatal("tvview: ", err)
 	}
 
+	// Before the first Navigate: the User-Agent is read as the page loads.
+	// Not fatal if it does not take — the app is still usable, just back to
+	// stalling on the channels that made us want this.
+	if !a.setUserAgent(cfg.UserAgent) {
+		fmt.Fprintln(os.Stderr, "tvview: could not set the user agent; using the web view's own")
+	} else if *debug {
+		fmt.Fprintln(os.Stderr, "tvview: user agent:", cfg.UserAgent)
+	}
+
 	w.SetSize(cfg.Window.Width, cfg.Window.Height, webview.HintNone)
 	w.SetTitle(a.windowTitle(start))
 	w.Navigate(start)

@@ -14,6 +14,18 @@ window:
   width: 1200
   height: 900
 
+# What the web view tells sites it is. Streaming sites pick which player and
+# which stream to serve based on this, and the web view's own string is not
+# Safari's — which is why some shows would play the ads and then stall.
+#
+# Delete the key below and the built-in default (the same string) is used, so
+# it only needs to be here if you want something else. Set it to Safari's exact
+# string on your machine if a site is still unhappy: Safari ▸ Develop ▸ Show
+# Web Inspector, then `navigator.userAgent` in the console.
+user_agent: >-
+  Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
+  (KHTML, like Gecko) Version/26.5 Safari/605.1.15
+
 channels:
   - title: PBS
     url: https://www.pbs.org
