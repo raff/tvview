@@ -50,6 +50,7 @@ var (
 	selCount         = objc.RegisterName("count")
 	selObjectAtIndex = objc.RegisterName("objectAtIndex:")
 	selIsKindOfClass = objc.RegisterName("isKindOfClass:")
+	selWindows       = objc.RegisterName("windows")
 
 	// Implemented by our own target class, below.
 	selMenuAction      = objc.RegisterName("tvviewMenuAction:")
@@ -254,8 +255,8 @@ func installMenuBar(a *app) error {
 // reaches the web view at all, leaving the item greyed out. Messaging the view
 // directly works whatever holds focus.
 //
-// If the view cannot be found the channel is re-navigated instead, which at
-// least reloads something.
+// If the view cannot be found the page is asked to reload itself, which is the
+// best that can be done without anything native to message.
 func (a *app) reload() {
 	a.w.Dispatch(func() {
 		if view := a.webView(); view != 0 {
@@ -263,20 +264,36 @@ func (a *app) reload() {
 			return
 		}
 
-		a.mu.Lock()
-		url := a.current
-		a.mu.Unlock()
-		a.w.Navigate(url)
+		// Deliberately not a.Navigate(a.current): a.current is the channel's
+		// *configured* URL, never wherever you had browsed to, so going there
+		// drops you on the channel's home page. That was the Cmd-R bug — in
+		// player fullscreen the view was invisible to webView() and every
+		// reload took this branch.
+		a.w.Eval("location.reload();")
 	})
 }
 
-// webView finds the WKWebView inside the window, or 0. go-webview makes it the
-// content view, but that is its business and not a promise, so this searches
-// the view tree rather than assuming a depth.
+// cachedWebView is the WKWebView once found. Its identity never changes for the
+// life of the process and it is retained by whatever window it currently sits
+// in, so a bare pointer stays good — including across the reparenting below.
+var cachedWebView objc.ID
+
+// webView finds the WKWebView, or 0. go-webview makes it the window's content
+// view, but that is its business and not a promise, so this searches the view
+// tree rather than assuming a depth.
+//
+// It looks beyond our own window because WebKit moves the web view into a
+// window of its own for element fullscreen — the player's fullscreen button,
+// not the View menu's. While that is up, our window's content view no longer
+// contains it, and a search that stopped there would come back empty at exactly
+// the moment Cmd-R is most wanted.
 func (a *app) webView() objc.ID {
+	if cachedWebView != 0 {
+		return cachedWebView
+	}
+
 	classWebView := objc.GetClass("WKWebView")
-	window := objc.ID(uintptr(a.w.Window()))
-	if classWebView == 0 || window == 0 {
+	if classWebView == 0 {
 		return 0
 	}
 
@@ -298,7 +315,35 @@ func (a *app) webView() objc.ID {
 		return 0
 	}
 
-	return find(window.Send(selContentView))
+	// Our own window first — the usual case, and the cheapest.
+	if window := objc.ID(uintptr(a.w.Window())); window != 0 {
+		if view := find(window.Send(selContentView)); view != 0 {
+			cachedWebView = view
+			return view
+		}
+	}
+
+	// Then every window the application has, which is where a fullscreen host
+	// window shows up. Resolved here rather than trusting installMenuBar to
+	// have run: this is reachable from anywhere.
+	classApp := classApplication
+	if classApp == 0 {
+		classApp = objc.GetClass("NSApplication")
+	}
+	if classApp == 0 {
+		return 0
+	}
+
+	windows := objc.ID(classApp).Send(selSharedApplication).Send(selWindows)
+	for i, n := 0, objc.Send[int](windows, selCount); i < n; i++ {
+		window := windows.Send(selObjectAtIndex, i)
+		if view := find(window.Send(selContentView)); view != 0 {
+			cachedWebView = view
+			return view
+		}
+	}
+
+	return 0
 }
 
 // newMenuTarget registers the class that receives our own menu items' clicks

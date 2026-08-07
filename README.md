@@ -293,6 +293,16 @@ mid-show, so re-navigating to the channel's URL would throw away the very thing
 you were watching. Being native, it also does not need the page's JavaScript to
 still be running, which when a player has wedged it often is not.
 
+Finding the view takes some care, because WebKit moves it into a window of its
+own when the *player* goes fullscreen. A search that stopped at our window came
+back empty exactly then, and the fallback re-navigated to the channel's
+URL — so Cmd-R while fullscreen dropped you on the channel's home page, which
+looked for a while like a per-channel bug in the sites. The lookup now caches
+the view (its identity never changes for the life of the process, and the cache
+is warmed at startup before any fullscreen exists) and, if ever cold, searches
+every window in `[NSApp windows]` rather than only ours. The fallback asks the
+page to reload itself instead of navigating anywhere.
+
 It does not use `reload:` down the responder chain, the way the Edit menu works.
 That chain starts at the first responder, so until something in the page has
 been clicked it runs window → delegate → NSApp and never reaches the web view,

@@ -1,10 +1,17 @@
 # Open issues
 
-1. [What Cmd-R should reload](#2-what-cmd-r-should-reload)
+Both reported bugs are fixed. What is left is one undecided enhancement:
 
-Fixed, kept for the reasoning:
+- [Reloading the player in place, rather than the page](#the-design-fork-once-we-know)
+  — optional now that Cmd-R itself behaves.
+
+Fixed, kept for the reasoning — both turned out to be one branch or one header,
+and in both cases the interesting part is why the obvious diagnosis was wrong:
 
 1. [Playback stalls at the start of the show](#1-playback-stalls-at-the-start-of-the-show)
+   — the user agent, not DRM.
+2. [What Cmd-R should reload](#2-what-cmd-r-should-reload)
+   — our view lookup in fullscreen, not the sites' URLs.
 
 ---
 
@@ -123,8 +130,11 @@ string on stderr at startup.
 
 # 2. What Cmd-R should reload
 
-Status: **browser check done — and it says the diagnosis below was wrong.** The
-symptom is real; the explanation was not. See *What the browser actually said*.
+Status: **the reported bug is fixed.** It was not what this note assumed — the
+sites were innocent and the browser check disproved the original diagnosis. The
+cause was our own view lookup coming back empty in fullscreen; see *So what was
+actually causing it*. What remains open is only the optional in-place player
+repair at the bottom, which is now a nice-to-have rather than a fix.
 
 ## The symptom
 
@@ -189,10 +199,13 @@ Rough shape of the iframe case, to try by hand in the console first:
 document.querySelectorAll('iframe').forEach(f => { f.src = f.src; });
 ```
 
-## So what is actually causing it — a new suspect
+## So what was actually causing it — confirmed, and fixed
 
-Untested, but it fits the symptom's exact words, and it is in our code rather
-than the sites'. `(*app).reload` falls back when it cannot find the web view:
+The suspect below was right. Confirmed on PBS: **Cmd-R in a window reloads the
+show; Cmd-R in fullscreen goes back to the main page.** Nothing to do with the
+channel, everything to do with fullscreen.
+
+`(*app).reload` falls back when it cannot find the web view:
 
 ```go
 if view := a.webView(); view != 0 {
@@ -206,21 +219,32 @@ a.w.Navigate(a.current)   // <- a.current is the channel's *configured* URL
 page — never wherever you browsed to. **If `webView()` ever returns 0, Cmd-R
 lands you on the channel's home page**, which is the complaint verbatim.
 
-When would it return 0? `webView()` walks down from the window's `contentView`,
-and WebKit reparents the web view into its own window for *player* fullscreen.
-That would also explain "works on some channels and badly on others" without the
-channels differing at all — what differs is whether you were watching fullscreen
-when you hit Cmd-R.
+Why it returned 0: `webView()` walked down from the window's `contentView`, and
+WebKit reparents the web view into a window of its own for *element* fullscreen
+— the player's fullscreen button, not the View menu's. While that window is up,
+ours no longer contains the view, so every Cmd-R took the fallback. It looked
+channel-dependent only because fullscreen is how you watch some channels and not
+others.
 
-Two things to do with that:
+Note this was never "some channels are broken". It was one branch, taken
+whenever you were fullscreen, on every channel.
 
-1. **Check it.** Play something fullscreen, hit Cmd-R, see whether you land on
-   the channel home. Instrumenting `reload` to log which branch it took would
-   settle it in one run.
-2. **Fix the fallback regardless.** Re-navigating to the channel URL is the
-   wrong thing to do whatever the cause — it discards where you were. Evaluating
-   `location.reload()` in the page keeps the current document, and the native
-   path stays first for the wedged-JS case that motivated it.
+### The fix, in two parts
+
+1. **`webView()` no longer loses the view.** It caches the result — the object's
+   identity never changes for the life of the process — and the cache is warmed
+   at startup by `setUserAgent`, before any fullscreen exists to hide it. If the
+   cache is ever cold it now also searches every window in `[NSApp windows]`,
+   not just ours, which is where a fullscreen host window turns up.
+2. **The fallback no longer re-navigates.** `a.w.Eval("location.reload()")`
+   reloads the current document instead of jumping to `a.current`. Reaching it
+   at all means there is nothing native to message, so the page's own JS is the
+   only tool left; the native path still goes first, for the wedged-JS case that
+   motivated it.
+
+Worth remembering as a shape: a lookup that walks a view tree is a lookup that
+can come back empty, and the interesting question is always *when*. Here the
+answer was "exactly when the feature is most wanted", which is the usual answer.
 
 ## The design fork, once we know
 
