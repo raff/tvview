@@ -172,14 +172,47 @@ means the next launch starts from the first channel again.
 | Action           | How                                                        |
 | ---------------- | ---------------------------------------------------------- |
 | Open/close       | Click **☰** (top left), **F9**, or **Cmd-`\`**              |
-| Close            | **Esc**                                                     |
+| Close            | **Esc**, or click anywhere in the page                      |
 | Switch channel   | Click an entry, or **Cmd-1**…**Cmd-9**                      |
 | Next/previous channel | **Cmd-]** / **Cmd-[**                                  |
 | Reload page      | **Cmd-R** (reloads in place — you keep what you're watching) |
 | Quit             | **Cmd-Q** twice, or **Quit** in the menu (immediate)        |
 
 The toggle button sits at 22% opacity when idle so it doesn't cover video, and
-brightens when you hover it or move the pointer into that corner.
+brightens when you hover it or move the pointer into that corner. It stays **☰**
+whether open or closed — clicking the page is the primary way out, so a ✕ would
+advertise the lesser of the two.
+
+### Why the panel stays open after a channel switch
+
+Because closing it is one click away, and that click is one you were going to
+make anyway. Picking a channel leaves the panel up, so you can try several in a
+row without reaching for the toggle each time; the first click on the show
+itself puts it away.
+
+That dismissal needs two separate mechanisms, because a click in the page and a
+click in the player are not the same event:
+
+| Where you click        | What we see                                              |
+| ---------------------- | -------------------------------------------------------- |
+| The page proper        | A `pointerdown` on `window`, captured before the page can swallow it |
+| Inside an iframe       | Nothing — events never cross a document boundary, whatever the origin |
+
+The second is the case that matters, since the player is nearly always an
+iframe. The only trace such a click leaves in the parent is *focus*: the window
+blurs and `document.activeElement` becomes the frame element. So a `blur` whose
+`activeElement` is an `IFRAME` counts as a click in the player. Testing
+`activeElement` is also what stops Cmd-Tab and the menubar from closing the
+panel — those blur the window too, but leave focus in `body`.
+
+Two guards keep this from misfiring:
+
+- **A grace window** (`DISMISS_GRACE`, 1.2s) after each page load. Players and ad
+  frames routinely grab focus while a page settles, and without it a
+  restored-open panel would shut itself the instant it appeared.
+- **Dismissal is off while navigating.** Between picking a channel and the new
+  page arriving, this document is being torn down; a stray blur on the way out
+  would tell Go the panel was closed, and the *next* page would honour that.
 
 The Cmd shortcuts are macOS menubar items and keep working when focus is inside
 a player; **F9** and **Esc** do not. See *Quitting, and the menubar* below.
@@ -388,7 +421,8 @@ field is immediately readable from `sidebar.js` — no plumbing in between.
   reaches the parent. Once focus is in an embedded player, **F9** and **Esc** stop
   responding. Menubar shortcuts are immune, so Cmd-`\` is the reliable way to
   reach the sidebar and Cmd-1…9 the reliable way to change channel; **F9** and
-  **Esc** remain best-effort.
+  **Esc** remain best-effort. Click-to-dismiss is *not* affected — it reads focus
+  rather than events, which is the one signal a frame cannot keep to itself.
 - **The menubar is macOS-only**, by necessity rather than omission: Windows and
   Linux do not route shortcuts through an application menu. WebView2 and
   WebKitGTK handle the clipboard keys themselves and the window manager handles

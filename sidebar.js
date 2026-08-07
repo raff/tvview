@@ -27,8 +27,16 @@
   var channels = boot.channels || [];
 
   var PANEL_WIDTH = 268;
+
+  // How long after a page settles to ignore the focus-based dismissal below.
+  // Players and ad frames routinely grab focus as a page loads, and without
+  // this a restored-open panel would shut itself the moment it appeared.
+  var DISMISS_GRACE = 1200;
+
   var open = false;
   var current = "";
+  var settledAt = 0;
+  var navigating = false;
   var host, wrap, toggle, list;
 
   var CSS = [
@@ -124,6 +132,9 @@
     wrap = document.createElement("div");
     wrap.className = "wrap no-anim";
 
+    // Stays ☰ whether open or closed: clicking the page is what closes the
+    // panel now, so a ✕ would advertise the lesser of the two ways out. It
+    // still toggles, since a button that does nothing when open is worse.
     toggle = document.createElement("button");
     toggle.className = "toggle";
     toggle.type = "button";
@@ -145,7 +156,7 @@
 
     var foot = document.createElement("div");
     foot.className = "foot";
-    foot.innerHTML = "<kbd>F9</kbd> toggle · <kbd>Esc</kbd> close";
+    foot.innerHTML = "<kbd>F9</kbd> toggle · <kbd>Esc</kbd> or click the page to close";
 
     panel.appendChild(head);
     panel.appendChild(list);
@@ -179,13 +190,19 @@
   function setOpen(next, notify) {
     open = !!next;
     wrap.classList.toggle("open", open);
-    toggle.textContent = open ? "✕" : "☰";
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     if (notify && window.wvSetOpen) window.wvSetOpen(open);
   }
 
+  // The panel deliberately stays open across a channel switch, so several
+  // channels can be tried without reaching for the toggle each time.
+  //
+  // From here until the new page replaces us, dismissal is off: this document
+  // is being torn down, and a stray blur on the way out would tell Go the
+  // panel was closed — which the *next* page would then honour.
   function select(url) {
     current = url;
+    navigating = true;
     renderList();
     if (window.wvSelect) window.wvSelect(url);
   }
@@ -207,6 +224,49 @@
       },
       true
     );
+  }
+
+  // isOurs reports whether an event came from the sidebar's own UI. Events
+  // crossing a shadow boundary are retargeted to the host by the time they
+  // reach window, so composedPath is the honest test; the fallback is for the
+  // retargeted case, which is all we would see without it.
+  function isOurs(e) {
+    if (e.composedPath) return e.composedPath().indexOf(host) !== -1;
+    return e.target === host || (host.contains && host.contains(e.target));
+  }
+
+  // Closing on a click in the page is what lets the panel stay open after a
+  // channel switch: channel-hopping costs no extra clicks, and the first click
+  // on the show itself puts the panel away.
+  //
+  // Two events, because one is not enough. A click in the page proper we see
+  // directly. A click inside an iframe we never see at all — events do not
+  // cross a document boundary, whatever the origin — and the player is nearly
+  // always an iframe, which is the case that matters most here.
+  function bindDismiss() {
+    // Capture, and pointerdown rather than click: pages stop propagation on
+    // their own click handlers freely, and pointerdown lands before the page
+    // has had its chance to.
+    window.addEventListener(
+      "pointerdown",
+      function (e) {
+        if (!open || navigating) return;
+        if (isOurs(e)) return;
+        setOpen(false, true);
+      },
+      true
+    );
+
+    // The iframe case. Focus moving into a frame blurs this window and leaves
+    // the frame element as activeElement — the only trace of the click we get.
+    // Testing activeElement is also what keeps Cmd-Tab and the menubar from
+    // closing the panel: those blur the window too, but leave focus in body.
+    window.addEventListener("blur", function () {
+      if (!open || navigating) return;
+      if (Date.now() < settledAt) return;
+      var el = document.activeElement;
+      if (el && el.tagName === "IFRAME") setOpen(false, true);
+    });
   }
 
   function bindKeys() {
@@ -267,9 +327,11 @@
   }
 
   function start() {
+    settledAt = Date.now() + DISMISS_GRACE;
     build();
     trackEdge();
     bindKeys();
+    bindDismiss();
     keepAttached();
     applyState(0);
   }
