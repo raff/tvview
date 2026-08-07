@@ -123,7 +123,8 @@ string on stderr at startup.
 
 # 2. What Cmd-R should reload
 
-Status: parked, pending a check in a real browser.
+Status: **browser check done — and it says the diagnosis below was wrong.** The
+symptom is real; the explanation was not. See *What the browser actually said*.
 
 ## The symptom
 
@@ -131,40 +132,95 @@ Cmd-R works well on some channels and badly on others. On the bad ones it does
 not reload the player you are watching — it lands you back on the channel's home
 page or on the episode page.
 
-## Why
+## Why — the original guess, now disproved
 
 `reload` is `WKWebView`'s own `-reload`, sent to the web view directly (see
 `(*app).reload` in `menu_darwin.go`). That reloads whatever URL the *top
-document* is at. On the channels that misbehave, the player is a state the site
-never wrote into the URL — an SPA view, or a player mounted over an episode
-page — so re-loading that URL legitimately returns you to the page the URL names.
+document* is at. The guess was that on the misbehaving channels the player is a
+state the site never wrote into the URL — an SPA view, or a player mounted over
+an episode page — so re-loading that URL legitimately returns you to the page
+the URL names, and Chrome would do the same.
 
-This is the site's doing, not the reload's. Chrome's Cmd-R should behave the
-same way on those channels. **That is the thing to confirm in a browser**, along
-with the next section.
+**It does not.** Every channel tested writes the player into the URL, and a
+reload of that URL stays put.
 
-## What to check in the browser, per offending channel
+## What the browser actually said
 
-1. Get the player stuck (or just start playing), then hit Cmd-R. Does Chrome
-   also drop back to the home/episode page? If yes, our reload is behaving
-   correctly and the fix has to avoid reloading the top document at all.
-2. Does the URL bar change as you go from the channel's home page into a show?
-   If the player *does* have its own URL, a plain reload should keep it — and a
-   channel that still drops out is doing something else worth looking at.
-3. In devtools, is the player an `<iframe>` or a `<video>` in the page itself?
-   This decides which repair below is even available:
+Chrome 151, driven over CDP with our Safari user agent, on a fresh profile.
+Each channel was loaded at its configured URL, clicked through into content the
+way a viewer would (so an SPA that only `pushState`s would be caught), then
+reloaded:
 
-| Player is           | Possible in-place repair                          |
-| ------------------- | ------------------------------------------------- |
-| cross-origin iframe | reset the iframe's `src` from the parent — allowed, it is the parent's own DOM element. Player restarts, surrounding page never navigates. |
-| in-page `<video>`   | `video.load()` — restarts a stalled stream with no navigation at all. |
-| neither             | nothing but the full-page reload we already do.   |
+| Channel | URL tracked the click-through? | After reload |
+| ------- | ------------------------------ | ------------ |
+| PBS      | yes — `/video/<episode-slug>/`        | stays put |
+| Pluto TV | yes — `/us/live-tv/<channel-id>`      | stays put |
+| Tubi     | yes — `/movies/<id>/<slug>`           | stays put |
+
+Pluto is worth a note: the configured `https://pluto.tv/` immediately redirects
+to `/us/live-tv/<id>`, so even the landing page is addressable, and switching
+channels inside the SPA rewrites that id. It is the channel the symptom would
+have been most likely to describe, and it behaves.
+
+So `-reload` is doing the right thing, the sites are cooperating, and **the
+premise that the player is not in the URL is false for every channel we ship**.
+
+### Which repair each player admits
+
+Same run, checking what the player actually is once content is up (ad and auth
+frames — `imasdk`, `doubleclick`, `accounts.google` — filtered out):
+
+| Channel    | Player                                  | Repair available |
+| ---------- | --------------------------------------- | ---------------- |
+| PBS        | cross-origin iframe (`player.pbs.org`)  | iframe `src` reset |
+| Pluto TV   | same-origin iframes (`pluto.tv`)        | either |
+| Tubi       | in-page `<video>`                       | `video.load()` |
+| Al Jazeera | in-page `<video>`                       | `video.load()` |
+| DW News    | in-page `<video>`                       | `video.load()` |
+| Peacock, NASA+, France 24 | not reached — login wall or a play click headless would not give | unknown |
+
+Every channel that could be reached has one repair or the other, which is the
+number the design fork below was waiting on: the in-place path would cover all
+of them, not some.
 
 Rough shape of the iframe case, to try by hand in the console first:
 
 ```js
 document.querySelectorAll('iframe').forEach(f => { f.src = f.src; });
 ```
+
+## So what is actually causing it — a new suspect
+
+Untested, but it fits the symptom's exact words, and it is in our code rather
+than the sites'. `(*app).reload` falls back when it cannot find the web view:
+
+```go
+if view := a.webView(); view != 0 {
+    view.Send(selReload)
+    return
+}
+a.w.Navigate(a.current)   // <- a.current is the channel's *configured* URL
+```
+
+`a.current` is only ever written by `selectChannel`, so it is the channel's home
+page — never wherever you browsed to. **If `webView()` ever returns 0, Cmd-R
+lands you on the channel's home page**, which is the complaint verbatim.
+
+When would it return 0? `webView()` walks down from the window's `contentView`,
+and WebKit reparents the web view into its own window for *player* fullscreen.
+That would also explain "works on some channels and badly on others" without the
+channels differing at all — what differs is whether you were watching fullscreen
+when you hit Cmd-R.
+
+Two things to do with that:
+
+1. **Check it.** Play something fullscreen, hit Cmd-R, see whether you land on
+   the channel home. Instrumenting `reload` to log which branch it took would
+   settle it in one run.
+2. **Fix the fallback regardless.** Re-navigating to the channel URL is the
+   wrong thing to do whatever the cause — it discards where you were. Evaluating
+   `location.reload()` in the page keeps the current document, and the native
+   path stays first for the wedged-JS case that motivated it.
 
 ## The design fork, once we know
 
@@ -181,5 +237,14 @@ gets Cmd-R:
   player-only reload on its own key (Cmd-Alt-R). The stuck-player case then
   needs the second shortcut.
 
-Not decided. The browser check should say how many channels the iframe path
-would actually cover, which is the number that decides it.
+Still not decided, but the number it was waiting on is in: **every reachable
+channel admits one repair or the other**, so "player first, page as fallback"
+would not be ragged across channels the way the second bullet feared. That
+argues for the first option.
+
+What has changed is the urgency. The in-place repair was wanted because a plain
+reload was thought to drop you out of the player — and it does not. So this is
+now a *nice-to-have* for restarting a stalled stream without losing your place,
+not a fix for a broken Cmd-R. The broken Cmd-R, if the fullscreen suspect above
+holds, is a four-line fix in `reload`'s fallback and has nothing to do with the
+fork.
