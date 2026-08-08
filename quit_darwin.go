@@ -98,6 +98,12 @@ func alignCenter() int {
 // The two are told apart by the event that triggered the action. A key
 // equivalent leaves a key-down as NSApp.currentEvent; a click leaves a mouse
 // event.
+//
+// Both branches that actually quit call a.shutdown() first — the one seam
+// this file has into whatever cleanup the rest of the app needs before the
+// process ends, without this file needing to know what that is. It only
+// blocks when there is something to tear down, and only up to
+// quitVPNGrace, so quitting stays "at once" in the common case.
 func (a *app) requestQuit() {
 	app := objc.ID(classApplication).Send(selSharedApplication)
 
@@ -105,11 +111,13 @@ func (a *app) requestQuit() {
 	fromKeyboard := event != 0 && objc.Send[int](event, selType) == eventKeyDown
 
 	if !fromKeyboard {
+		a.shutdown()
 		app.Send(selTerminate, objc.ID(0))
 		return
 	}
 
 	if !quitArmedAt.IsZero() && time.Since(quitArmedAt) <= quitArmedFor {
+		a.shutdown()
 		app.Send(selTerminate, objc.ID(0))
 		return
 	}

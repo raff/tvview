@@ -52,9 +52,13 @@ var (
 	selIsKindOfClass = objc.RegisterName("isKindOfClass:")
 	selWindows       = objc.RegisterName("windows")
 
+	selAddObserver = objc.RegisterName("addObserver:selector:name:object:")
+	selDefaultCtr  = objc.RegisterName("defaultCenter")
+
 	// Implemented by our own target class, below.
 	selMenuAction      = objc.RegisterName("tvviewMenuAction:")
 	selMenuNeedsUpdate = objc.RegisterName("menuNeedsUpdate:")
+	selWindowWillClose = objc.RegisterName("tvviewWindowWillClose:")
 )
 
 // AppKit classes, resolved by installMenuBar rather than at init. See there.
@@ -125,6 +129,21 @@ func menuNeedsUpdate(_ objc.ID, _ objc.SEL, menu objc.ID) {
 	}
 }
 
+// windowWillClose is the notification-based counterpart to requestQuit, for
+// the one quit path that never calls it: the window's own red close button,
+// handled entirely inside libwebview. See the observer registration in
+// installMenuBar for why a notification and not a delegate.
+//
+// AppKit calls this on the main thread, synchronously, as part of closing the
+// window — so a.shutdown() blocking here genuinely holds up the close (and
+// libwebview's own subsequent decision to quit the app) for as long as it
+// runs, the same way it holds up requestQuit's callers.
+func windowWillClose(_ objc.ID, _ objc.SEL, _ objc.ID) {
+	if menuApp != nil {
+		menuApp.shutdown()
+	}
+}
+
 // installMenuBar builds the application's main menu and installs it.
 //
 // The embedded libwebview never creates one — the dylib contains no NSMenu
@@ -165,6 +184,26 @@ func installMenuBar(a *app) error {
 	target, err := newMenuTarget()
 	if err != nil {
 		return err
+	}
+
+	// The red close button never reaches requestQuit: libwebview owns the
+	// window and its own delegate answers applicationShouldTerminateAfterLast-
+	// WindowClosed: entirely inside the native library, with no call back into
+	// this process's Go code. NSWindowWillCloseNotification is the fix rather
+	// than fighting over the delegate — it is a notification, not a
+	// one-object-only role, so any number of observers can watch it alongside
+	// whatever libwebview already is, and object: scopes it to this one window
+	// so the quit-prompt HUD's own window (see quit_darwin.go) cannot trigger
+	// it. There is exactly one real window for the app's whole life —
+	// fullscreen swaps views inside it rather than swapping windows (see
+	// fullscreen_darwin.go) — so "this window closing" and "the app quitting"
+	// are the same event here.
+	if window := objc.ID(uintptr(a.w.Window())); window != 0 {
+		if classCenter := objc.GetClass("NSNotificationCenter"); classCenter != 0 {
+			center := objc.ID(classCenter).Send(selDefaultCtr)
+			center.Send(selAddObserver, target, selWindowWillClose,
+				nsString("NSWindowWillCloseNotification"), window)
+		}
 	}
 
 	app := objc.ID(classApplication).Send(selSharedApplication)
@@ -361,6 +400,7 @@ func newMenuTarget() (objc.ID, error) {
 		[]objc.MethodDef{
 			{Cmd: selMenuAction, Fn: menuAction},
 			{Cmd: selMenuNeedsUpdate, Fn: menuNeedsUpdate},
+			{Cmd: selWindowWillClose, Fn: windowWillClose},
 		},
 	)
 	if err != nil {

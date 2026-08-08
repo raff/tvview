@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/abemedia/go-webview"
 	_ "github.com/abemedia/go-webview/embedded" // embed native library
@@ -21,6 +22,7 @@ var sidebarJS string
 type app struct {
 	w   webview.WebView
 	cfg *Config
+	vpn *vpnManager // nil when the config has no vpn block
 
 	mu      sync.Mutex
 	open    bool
@@ -65,7 +67,7 @@ func main() {
 		}
 	}
 
-	a := &app{w: w, cfg: cfg, current: start}
+	a := &app{w: w, cfg: cfg, vpn: newVPNManager(cfg.VPN), current: start}
 
 	if err := a.bind(); err != nil {
 		log.Fatal("tvview: ", err)
@@ -96,7 +98,18 @@ func main() {
 
 	w.SetSize(cfg.Window.Width, cfg.Window.Height, webview.HintNone)
 	w.SetTitle(a.windowTitle(start))
-	w.Navigate(start)
+
+	// A channel that needs a tunnel must not be fetched before there is one.
+	// about:blank first gives the status overlay a document to appear in, and
+	// keeps the site from ever seeing the unrouted address — a geo-block, once
+	// cached, outlives the tunnel that would have prevented it.
+	if a.vpn != nil && a.regionFor(start) != "" {
+		w.Navigate("about:blank")
+		go a.enterChannel(start)
+	} else {
+		w.Navigate(start)
+	}
+
 	w.Run()
 }
 
@@ -167,10 +180,86 @@ func (a *app) selectChannel(url string) {
 
 	saveLastChannel(url)
 
-	// Never navigate from inside the binding callback.
+	if a.vpn == nil || a.regionFor(url) == a.vpn.Current() {
+		a.navigate(url)
+		return
+	}
+
+	// A tunnel takes seconds and this runs on the web view's JS thread, so the
+	// wait happens elsewhere. enterChannel navigates once it is up.
+	go a.enterChannel(url)
+}
+
+// enterChannel puts the right tunnel up and then goes to url, narrating the
+// wait into the page it is leaving.
+func (a *app) enterChannel(url string) {
+	region := a.regionFor(url)
+
+	// A channel with no region leaves an existing tunnel alone unless the
+	// config asked otherwise.
+	if region == "" && !a.cfg.VPN.Disconnects() {
+		a.navigate(url)
+		return
+	}
+
+	if region == "" {
+		a.showVPN("working", "Disconnecting…")
+	} else {
+		a.showVPN("working", "Connecting to "+region+"…")
+	}
+
+	err := a.vpn.Ensure(region)
+
+	// The user may have picked something else while the tunnel negotiated.
+	// That switch has its own goroutine and owns the outcome now; navigating
+	// here would drag them back to a channel they already left.
+	a.mu.Lock()
+	stale := a.current != url
+	a.mu.Unlock()
+	if stale {
+		return
+	}
+
+	if err != nil {
+		// Staying put is the point: loading the channel now would show a
+		// geo-block that looks like the site's fault rather than ours.
+		fmt.Fprintln(os.Stderr, "tvview: vpn:", err)
+		a.showVPN("error", err.Error())
+		return
+	}
+
+	a.showVPN("idle", "")
+	a.navigate(url)
+}
+
+// navigate moves the web view. Never called from inside a binding callback
+// without Dispatch: navigating from the JS thread deadlocks the web view.
+func (a *app) navigate(url string) {
 	a.w.Dispatch(func() {
 		a.w.SetTitle(a.windowTitle(url))
 		a.w.Navigate(url)
+	})
+}
+
+// regionFor is the VPN region a channel asked for, or "" for none.
+func (a *app) regionFor(url string) string {
+	for _, c := range a.cfg.Channels {
+		if c.URL == url {
+			return c.Region
+		}
+	}
+	return ""
+}
+
+// showVPN drives the status overlay in the current page. JSON does the
+// escaping, so an error message full of quotes cannot break the eval.
+func (a *app) showVPN(state, text string) {
+	msg, err := json.Marshal(map[string]string{"state": state, "text": text})
+	if err != nil {
+		return
+	}
+	a.w.Dispatch(func() {
+		a.w.Eval("window.wvVPN && window.wvVPN(" + string(msg) + ");")
 	})
 }
 
@@ -190,4 +279,35 @@ func (a *app) windowTitle(url string) string {
 		}
 	}
 	return a.cfg.Window.Title
+}
+
+// quitVPNGrace bounds how long shutdown waits for the tunnel to come down.
+// Long enough for a normal `wg-quick down`, which is ordinarily near-instant;
+// short enough that a stuck one does not make Quit itself look hung. Past it,
+// shutdown gives up and lets the process exit anyway — the teardown may still
+// be running, orphaned, and finish a moment later on its own. That is fine;
+// it is exactly how the tunnel's own DNS-restoring daemon already behaves
+// (see README, "Watching from another country").
+const quitVPNGrace = 3 * time.Second
+
+// shutdown is the one seam a platform's quit handling calls into before it
+// actually ends the process. It exists so quit_darwin.go — AppKit quit-button
+// mechanics, not VPN policy — never needs to know a VPN exists; it just calls
+// this. Safe to call whether or not a VPN is configured, or one is even up.
+func (a *app) shutdown() {
+	if a.vpn == nil || a.vpn.Current() == "" {
+		return
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- a.vpn.Ensure("") }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "tvview: vpn teardown on quit:", err)
+		}
+	case <-time.After(quitVPNGrace):
+		fmt.Fprintf(os.Stderr, "tvview: vpn teardown did not finish within %s; quitting anyway\n", quitVPNGrace)
+	}
 }

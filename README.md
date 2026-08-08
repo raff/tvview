@@ -157,6 +157,197 @@ macOS only: it goes through `WKWebView`'s `-setCustomUserAgent:`, and
 `menu_other.go` no-ops it elsewhere. A failure to apply it is a line on stderr,
 not a refusal to start.
 
+### Watching from another country
+
+RAI and the BBC serve their good material only to addresses in Italy and the UK.
+A channel can name a `region`, and tvview raises a VPN tunnel for it before the
+page is fetched and lowers it on the way out:
+
+```yaml
+vpn:
+  up:   ["/usr/bin/sudo", "-n", "/opt/homebrew/bin/wg-quick", "up",   "{region}"]
+  down: ["/usr/bin/sudo", "-n", "/opt/homebrew/bin/wg-quick", "down", "{region}"]
+
+channels:
+  - title: RaiPlay
+    url: https://www.raiplay.it/
+    region: IT
+```
+
+tvview knows nothing about VPNs. It runs those two commands with `{region}`
+substituted, waits for exit 0, and treats anything else as a failure — so any
+backend with a command line works, and switching backends never touches Go.
+
+Three things about the commands are worth knowing before the first one fails:
+
+- **No shell.** They are executed directly: no globbing, no quoting, no `$VARS`,
+  no pipes. Anything needing a shell goes in a script that you call instead.
+- **Absolute paths.** `TVView.app` launched from Finder inherits a minimal `PATH`
+  with neither `/opt/homebrew/bin` nor `/usr/local/bin`. A bare `wg-quick` that
+  works in your terminal is simply not found here; the error says so when it
+  can tell.
+- **A leading `~/` is expanded**, so `["~/bin/vpn.sh", "up", "{region}"]` finds
+  your script even though nothing here goes through a shell.
+
+Two optional keys: `timeout` (a Go duration, default `60s`) bounds a single up
+or down, and `auto_disconnect` (default `true`) lowers the tunnel when you
+switch to a channel with no region — so an evening that starts on RaiPlay does
+not quietly route the rest of itself through Milan. Set it `false` to keep the
+tunnel between channels, which makes switching back much faster.
+
+#### Why WireGuard and not IKEv2
+
+The obvious macOS answer is a native IKEv2 profile per country plus
+`["/usr/sbin/scutil", "--nc", "start", "Proton-{region}"]` — no sudo, no
+Homebrew. It works today and it is a dead end: Proton began [removing IKEv2 from
+their servers in April 2026](https://protonvpn.com/blog/ikev2-ending), with
+final shutdown in February 2027. That is server-side, so it takes native
+profiles down with it, not just their app. Connections fail intermittently in
+the meantime, which is the worst way for this to break.
+
+WireGuard is the replacement. Per-server configs come from
+account.protonvpn.com ▸ Downloads; `brew install wireguard-tools` provides
+`wg-quick`.
+
+#### Getting the config files
+
+1. Sign in at **account.protonvpn.com**.
+2. **Downloads → WireGuard configuration**.
+3. Name it something you'll recognise later — the name is only a label, not
+   what `wg-quick` matches on.
+4. **Platform: GNU/Linux.** Every platform choice here emits the same
+   `[Interface]`/`[Peer]` file; Linux is the one that assumes `wg-quick`,
+   which is what's actually driving this.
+5. **Server:** pick a specific country server yourself. Don't take
+   "Recommended" — that's chosen by load and proximity to *you*, which from
+   the US is never going to be Italy or the UK.
+6. **Create**, wait a few seconds, **Download**.
+
+Repeat per region, then rename to match the `region:` values in
+`channels.yaml` — the filename is the part that matters, since `wg-quick up IT`
+resolves to `/etc/wireguard/IT.conf`:
+
+```sh
+mv ~/Downloads/tvview-italy.conf ~/Downloads/IT.conf
+mv ~/Downloads/tvview-uk.conf    ~/Downloads/UK.conf
+```
+
+Two things worth knowing before they bite:
+
+- **Each file is pinned to one specific server, not to a country.** RAI and
+  the BBC blacklist VPN addresses individually, so when a channel that used to
+  work starts geo-blocking again, regenerating the config against a different
+  server in the same country is the usual fix — not a plumbing problem.
+- **The `.conf` holds a WireGuard private key in plain text.** That's the
+  actual reason for the root-owned, `600`-permission install below, not just
+  tidiness — leaving it world-readable in `~/Downloads` hands out a working
+  credential.
+
+Country selection needs a paid Proton plan; Free gives you a handful of
+countries that won't include Italy for RAI.
+
+#### Making sudo safe here
+
+`wg-quick` needs root, and a `NOPASSWD` rule for it is **not** the small grant it
+looks like: a `.conf` file may carry `PostUp = <any command>`, which `wg-quick`
+runs as root. If the configs are writable by your user, that rule is a local
+root escalation with extra steps.
+
+Worse, `wg-quick` accepts a *path* as well as a bare name, so a wide grant lets
+anything that can drop a `.conf` in `/tmp` run a command as root.
+
+Two things close it: root-owned configs, and a rule pinned to exact arguments so
+no path argument is ever reachable. `wg-quick` reads bare names from
+`/etc/wireguard`, which is where they want to live anyway:
+
+```sh
+brew install wireguard-tools          # pulls in wireguard-go
+sudo install -d -m 700 -o root -g wheel /etc/wireguard
+sudo install -m 600 -o root -g wheel ~/Downloads/IT.conf /etc/wireguard/IT.conf
+sudo install -m 600 -o root -g wheel ~/Downloads/UK.conf /etc/wireguard/UK.conf
+```
+
+Then `/etc/sudoers.d/tvview-wg` — adjust the username and the Homebrew prefix
+(`brew --prefix`; `/usr/local` on Intel, `/opt/homebrew` on Apple Silicon):
+
+```
+Cmnd_Alias TVVIEW_WG = /usr/local/bin/wg-quick up IT,   \
+                       /usr/local/bin/wg-quick down IT, \
+                       /usr/local/bin/wg-quick up UK,   \
+                       /usr/local/bin/wg-quick down UK
+
+Defaults!TVVIEW_WG secure_path="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+rsena ALL=(root) NOPASSWD: TVVIEW_WG
+```
+
+The `secure_path` line is insurance. `wg-quick` is a bash script that shells out
+to `wireguard-go`, `wg` and `bash`, all of which Homebrew puts in its own prefix.
+macOS does not set `secure_path` by default, but it is one edit away from being
+set, and if it ever is that prefix is stripped from `PATH` and `wg-quick` dies
+looking for `wireguard-go`. Scoping it to these commands keeps the fix local.
+
+Install it the careful way — a malformed file in `sudoers.d` makes **sudo itself
+refuse to run**, which is an awkward hole to climb out of:
+
+```sh
+visudo -c -f ./tvview-wg    # validate BEFORE it is in place
+sudo install -m 440 -o root -g wheel ./tvview-wg /etc/sudoers.d/tvview-wg
+sudo -n /usr/local/bin/wg-quick up IT && sudo -n /usr/local/bin/wg-quick down IT
+```
+
+Keep a second terminal with a live `sudo -i` root shell open while you do this,
+so a mistake is an inconvenience rather than a recovery. Note the filename has
+no extension on purpose: sudo skips files in `sudoers.d` containing a `.` or
+ending in `~`, so a helpful `tvview-wg.conf` would be silently ignored.
+
+`sudo -n` in `channels.yaml` is what makes a missing rule fail immediately
+rather than hang forever on a password prompt behind the app window.
+
+#### What it does and does not guarantee
+
+The region tvview believes is up is tracked in the process, not probed — no
+backend offers a way to ask that is both cheap and reliable. A tunnel raised by
+the Proton app, or left from a previous run, is invisible to it and reads as
+"none". The resulting mistake is a redundant `up` on a region already routed,
+which every sane backend no-ops.
+
+A channel with a region is never fetched before its tunnel is up: startup lands
+on `about:blank` first, and a failed `up` leaves you there with the error rather
+than loading the page. That ordering is the whole point — a geo-block cached on
+one unrouted load outlives the tunnel that would have prevented it.
+
+Quitting from the app itself — the Quit menu item, a confirmed Cmd-Q, or the
+window's own red close button — lowers the tunnel first, waiting up to 3s
+(`quitVPNGrace` in `main.go`) for `wg-quick down` to finish before actually
+exiting. It only waits when a region is actually up, so quitting on a
+region-less channel is unaffected. Past that grace period it gives up and
+quits anyway; a teardown that was still genuinely in progress keeps running
+orphaned and finishes on its own moments later — no worse than not waiting at
+all, since AppKit's `terminate:` does not unwind Go `defer`s and there is no
+way to block it indefinitely regardless.
+
+That seam is `a.shutdown()` in `main.go`. The Quit menu item and Cmd-Q call it
+from `quit_darwin.go`, the two branches of `requestQuit` that actually
+terminate. The close button is a separate case: it is `libwebview`'s own
+window, whose own `NSWindowDelegate` decides — entirely inside that library —
+to quit the app when its last window closes, with no call back into this
+process's Go code. `menu_darwin.go` reaches it a different way, an
+`NSWindowWillCloseNotification` observer scoped to that one window (via
+`object:`, so it can't be confused with the quit-prompt HUD's own window) —
+a notification rather than a delegate specifically so it doesn't have to
+contend with `libwebview` for the one-delegate-per-window slot. None of these
+three call sites know what `shutdown` actually does.
+
+**Force-quit, a crash, or logout/shutdown bypass this entirely.** None of
+those run any Go code on the way out, so nothing lowers the tunnel: switch to
+a region-less channel before using any of them, or `wg-quick down IT`
+afterwards.
+
+And the plumbing working is not the same as the stream playing. Both broadcasters
+block known VPN address ranges, so expect to try more than one server, and prefer
+Proton's streaming-flagged ones.
+
 ### Remembering the last channel
 
 The URL of the current channel is written to
@@ -457,6 +648,12 @@ field is immediately readable from `sidebar.js` — no plumbing in between.
   closing, so `menu_other.go` is a deliberate no-op.
 - **No hot reload.** Edit `channels.yaml`, restart.
 - **One window.** Channels replace each other; there are no tabs.
+- **Force-quit leaves the VPN up.** The Quit menu item and a confirmed Cmd-Q
+  lower the tunnel before exiting; Force Quit, a crash, or logout/shutdown run
+  no Go code on the way out, so none of them do. Switch to a region-less
+  channel first, or lower it by hand. See *Watching from another country*
+  above, which also covers why the active region is tracked rather than
+  probed.
 
 ## Built with
 

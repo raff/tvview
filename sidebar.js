@@ -37,7 +37,11 @@
   var current = "";
   var settledAt = 0;
   var navigating = false;
-  var host, wrap, toggle, list;
+  var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
+
+  // Go may report a tunnel before build() has run — the eval races the user
+  // script on a fresh document. Hold the last state and apply it on build.
+  var vpnPending = null;
 
   var CSS = [
     ":host { all: initial; }",
@@ -88,13 +92,19 @@
     ".list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 4px; }",
 
     ".item {",
-    "  display: block; width: 100%; text-align: left;",
+    "  display: flex; align-items: center; gap: 8px;",
+    "  width: 100%; text-align: left;",
     "  padding: 9px 12px; margin-bottom: 2px;",
     "  font: inherit; color: #e9e9ee;",
     "  background: none; border: 0; border-radius: 7px;",
     "  cursor: pointer; position: relative;",
-    "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
     "  transition: background .12s ease;",
+    "}",
+    // The ellipsis lives on the label, not the button: a long title has to
+    // give way to the region tag rather than push it out of the panel.
+    ".item .name {",
+    "  flex: 1; min-width: 0;",
+    "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
     "}",
     ".item:hover { background: rgba(255,255,255,0.08); }",
     ".item.active { background: rgba(255,255,255,0.12); font-weight: 600; }",
@@ -112,7 +122,45 @@
     ".foot kbd {",
     "  font: inherit; padding: 1px 5px;",
     "  background: rgba(255,255,255,0.1); border-radius: 4px;",
-    "}"
+    "}",
+
+    // Region tag on channels that route through a tunnel, so it is visible
+    // which ones will pause to connect before anything plays.
+    ".badge {",
+    // The right-alignment is `.item .name { flex: 1 }` pushing this along —
+    // `.item` is a flex container, where float computes as none.
+    "  margin-left: 8px;",
+    "  padding: 1px 5px; border-radius: 4px;",
+    "  font-size: 10px; font-weight: 600; letter-spacing: .04em;",
+    "  color: #9ecbff; background: rgba(91,157,255,0.16);",
+    "}",
+
+    // Status while a tunnel comes up. Centred at the top rather than in the
+    // panel: the panel is usually shut by then, and this is the only sign
+    // that the blank pause is doing something.
+    ".vpn {",
+    "  position: fixed; top: 18px; left: 50%;",
+    "  transform: translateX(-50%); max-width: 70vw;",
+    "  display: none; align-items: center; gap: 9px;",
+    "  padding: 10px 16px;",
+    "  font: 13px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
+    "  color: #e9e9ee;",
+    "  background: rgba(16,16,20,0.94);",
+    "  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);",
+    "  border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;",
+    "  box-shadow: 0 6px 30px rgba(0,0,0,0.5);",
+    "  z-index: 3;",
+    "}",
+    ".vpn.on { display: flex; }",
+    ".vpn.err { border-color: rgba(255,120,110,0.45); color: #ffb3ac; }",
+    ".vpn .msg { overflow-wrap: anywhere; }",
+    ".spin {",
+    "  width: 13px; height: 13px; flex: none; border-radius: 50%;",
+    "  border: 2px solid rgba(255,255,255,0.22); border-top-color: #5b9dff;",
+    "  animation: sp .7s linear infinite;",
+    "}",
+    ".vpn.err .spin { display: none; }",
+    "@keyframes sp { to { transform: rotate(360deg); } }"
   ].join("\n");
 
   function build() {
@@ -158,16 +206,33 @@
     foot.className = "foot";
     foot.innerHTML = "<kbd>F9</kbd> toggle · <kbd>Esc</kbd> or click the page to close";
 
+    vpnBox = document.createElement("div");
+    vpnBox.className = "vpn";
+    vpnSpin = document.createElement("div");
+    vpnSpin.className = "spin";
+    vpnMsg = document.createElement("span");
+    vpnMsg.className = "msg";
+    vpnBox.appendChild(vpnSpin);
+    vpnBox.appendChild(vpnMsg);
+
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(foot);
     wrap.appendChild(toggle);
     wrap.appendChild(panel);
+    wrap.appendChild(vpnBox);
     root.appendChild(style);
     root.appendChild(wrap);
 
     renderList();
     document.documentElement.appendChild(host);
+
+    // A status that arrived while the DOM was still being assembled.
+    if (vpnPending) {
+      var s = vpnPending;
+      vpnPending = null;
+      window.wvVPN(s);
+    }
   }
 
   function renderList() {
@@ -177,8 +242,20 @@
       var btn = document.createElement("button");
       btn.className = "item" + (ch.url === current ? " active" : "");
       btn.type = "button";
-      btn.textContent = ch.title;
       btn.title = ch.url;
+
+      var name = document.createElement("span");
+      name.className = "name";
+      name.textContent = ch.title;
+      btn.appendChild(name);
+
+      if (ch.region) {
+        var tag = document.createElement("span");
+        tag.className = "badge";
+        tag.textContent = ch.region;
+        btn.appendChild(tag);
+      }
+
       btn.addEventListener("click", function () {
         select(ch.url);
       });
@@ -212,6 +289,26 @@
   // moment the script runs, which can be before build() has made `wrap`.
   window.wvToggleSidebar = function () {
     if (wrap) setOpen(!open, true);
+  };
+
+  // Go's way in, for the wait while a tunnel comes up.
+  //   {state: "working", text}  spinner and message
+  //   {state: "error",   text}  message, no spinner, stays until dismissed
+  //   {state: "idle"}           hide
+  //
+  // An error deliberately has no timeout: it is shown because the channel did
+  // not load, and the page underneath is the one being left, so there is
+  // nothing for it to obscure.
+  window.wvVPN = function (s) {
+    s = s || {};
+    if (!vpnBox) {
+      vpnPending = s;
+      return;
+    }
+    var on = s.state === "working" || s.state === "error";
+    vpnBox.classList.toggle("on", on);
+    vpnBox.classList.toggle("err", s.state === "error");
+    vpnMsg.textContent = s.text || "";
   };
 
   // Wake the toggle button when the pointer approaches the left edge, so it

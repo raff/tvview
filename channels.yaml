@@ -26,6 +26,45 @@ user_agent: >-
   Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
   (KHTML, like Gecko) Version/26.5 Safari/605.1.15
 
+# Optional. Channels that set a `region` below route through a VPN, which
+# tvview raises before it loads the page and lowers on the way out.
+#
+# tvview knows nothing about VPNs: it runs these two commands and waits for
+# exit 0, with {region} replaced by the channel's region. Any backend that can
+# be driven from a command line works — wg-quick, scutil, a script of your own.
+#
+# The commands run directly, NOT through a shell: no globbing, no quoting, no
+# $VARS, no pipes. Put anything that needs a shell in a script and call that.
+#
+# Use ABSOLUTE PATHS. TVView.app launched from Finder inherits a minimal PATH
+# with no /opt/homebrew/bin and no /usr/local/bin, so a bare `wg-quick` that
+# works fine in a terminal is simply not found here. Which of those two prefixes
+# is yours depends on the machine — `brew --prefix` says.
+#
+# The setup this expects is in README.md under "Watching from another country".
+#
+# vpn:
+#   up:   ["/usr/bin/sudo", "-n", "/usr/local/bin/wg-quick", "up",   "{region}"]
+#   down: ["/usr/bin/sudo", "-n", "/usr/local/bin/wg-quick", "down", "{region}"]
+#
+#   # How long one up or down may take before it is given up on. Default 60s.
+#   timeout: 60s
+#
+#   # Lower the tunnel when switching to a channel with no region. Default
+#   # true, so an evening that starts on RaiPlay does not quietly route the
+#   # rest of itself through Italy. Set false to keep the tunnel between
+#   # channels, which makes switching back much faster.
+#   auto_disconnect: true
+
+# /usr/local/bin, not /opt/homebrew/bin: this is an Intel Mac, and that is
+# where its Homebrew installs. `brew --prefix` settles it on any given machine.
+vpn:
+  up:   ["/usr/bin/sudo", "-n", "/usr/local/bin/wg-quick", "up",   "{region}"]
+  down: ["/usr/bin/sudo", "-n", "/usr/local/bin/wg-quick", "down", "{region}"]
+
+  timeout: 60s
+  auto_disconnect: true
+
 channels:
   - title: PBS
     url: https://www.pbs.org
@@ -38,6 +77,17 @@ channels:
 
   - title: Peacock TV
     url: https://www.peacocktv.com/
+
+  # Geo-restricted to Italy. Add `region: IT` once the vpn block above is
+  # uncommented and configured — a region with no vpn block is refused at
+  # startup rather than silently ignored, so the two go together.
+  - title: RaiPlay
+    url: https://www.raiplay.it/
+    region: IT
+
+  - title: BBC iPlayer
+    url: https://www.bbc.co.uk/iplayer
+    region: UK
 
   - title: NASA+
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
