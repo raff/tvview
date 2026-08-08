@@ -205,11 +205,21 @@ final shutdown in February 2027. That is server-side, so it takes native
 profiles down with it, not just their app. Connections fail intermittently in
 the meantime, which is the worst way for this to break.
 
-WireGuard is the replacement. Per-server configs come from
-account.protonvpn.com ▸ Downloads; `brew install wireguard-tools` provides
-`wg-quick`.
+WireGuard is the replacement, and it isn't a Proton-only choice: it's a
+plain, published protocol, so any backend that can hand you a standard
+`[Interface]`/`[Peer]` config file works here unchanged. NordVPN, for
+instance, is built on it too — NordLynx, their default protocol, *is*
+WireGuard with a connection-reuse layer on top — and separately publishes
+plain configs for exactly this kind of manual setup. `brew install
+wireguard-tools` provides `wg-quick` either way.
 
 #### Getting the config files
+
+Regardless of provider, the file you want is a `.conf` with `[Interface]`
+(your private key, address) and `[Peer]` (the server's public key, endpoint)
+sections — that's all `wg-quick` needs. Where it comes from differs:
+
+##### Proton VPN
 
 1. Sign in at **account.protonvpn.com**.
 2. **Downloads → WireGuard configuration**.
@@ -223,9 +233,29 @@ account.protonvpn.com ▸ Downloads; `brew install wireguard-tools` provides
    the US is never going to be Italy or the UK.
 6. **Create**, wait a few seconds, **Download**.
 
-Repeat per region, then rename to match the `region:` values in
-`channels.yaml` — the filename is the part that matters, since `wg-quick up IT`
-resolves to `/etc/wireguard/IT.conf`:
+Country selection needs a paid Proton plan; Free gives you a handful of
+countries that won't include Italy for RAI.
+
+##### NordVPN
+
+1. Sign in at **my.nordaccount.com** and open the NordVPN service.
+2. Find the manual/advanced setup area — NordVPN calls it something like
+   "Set up NordVPN manually", separate from the main app download. It's
+   there specifically for third-party clients like `wg-quick`.
+3. Pick **WireGuard** and a specific server (by country or hostname, not
+   "auto" or "recommended" — same reasoning as Proton above).
+4. Generate and download the `.conf`.
+
+NordVPN's manual-setup UI moves around more than Proton's, so treat the exact
+labels as approximate — the thing you're looking for is a WireGuard config
+generator that lets you pin a specific server, not the regular app's one-click
+connect. There's no free tier to worry about; any paid plan can do this.
+
+##### Either way
+
+Rename the downloaded file to match the `region:` values in `channels.yaml`
+— the filename is the part that matters, since `wg-quick up IT` resolves to
+`/etc/wireguard/IT.conf`:
 
 ```sh
 mv ~/Downloads/tvview-italy.conf ~/Downloads/IT.conf
@@ -242,9 +272,6 @@ Two things worth knowing before they bite:
   actual reason for the root-owned, `600`-permission install below, not just
   tidiness — leaving it world-readable in `~/Downloads` hands out a working
   credential.
-
-Country selection needs a paid Proton plan; Free gives you a handful of
-countries that won't include Italy for RAI.
 
 #### Making sudo safe here
 
@@ -308,9 +335,9 @@ rather than hang forever on a password prompt behind the app window.
 
 The region tvview believes is up is tracked in the process, not probed — no
 backend offers a way to ask that is both cheap and reliable. A tunnel raised by
-the Proton app, or left from a previous run, is invisible to it and reads as
-"none". The resulting mistake is a redundant `up` on a region already routed,
-which every sane backend no-ops.
+the provider's own app, or left from a previous run, is invisible to it and
+reads as "none". The resulting mistake is a redundant `up` on a region
+already routed, which every sane backend no-ops.
 
 A channel with a region is never fetched before its tunnel is up: startup lands
 on `about:blank` first, and a failed `up` leaves you there with the error rather
@@ -346,7 +373,8 @@ afterwards.
 
 And the plumbing working is not the same as the stream playing. Both broadcasters
 block known VPN address ranges, so expect to try more than one server, and prefer
-Proton's streaming-flagged ones.
+whichever ones your provider flags for streaming (Proton and NordVPN both
+label some servers this way).
 
 ### Remembering the last channel
 
