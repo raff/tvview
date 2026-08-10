@@ -1,50 +1,55 @@
+//go:build darwin
+
 package main
 
 import (
+	"net"
 	"os"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"testing"
-	"time"
 )
 
-// newTestVPN returns a manager whose up/down commands append "<verb> <region>"
-// to a log file, plus a func to read that log back. Nothing here touches the
-// network: what is being tested is the ordering, not the tunnelling.
-func newTestVPN(t *testing.T, upExit string) (*vpnManager, func() []string) {
+// testWireguardConf is a syntactically valid but unreachable wireguard
+// config — a TEST-NET-3 (RFC 5737) endpoint that will never answer, and a
+// key pair that's the right shape (32 random bytes, base64) without being a
+// real registered peer. Good enough to exercise ParseConfig/StartWireguard/
+// spawnSocks5 end to end: none of them wait for a handshake, only for the
+// local netstack device and SOCKS5 listener to come up.
+const testWireguardConf = `[Interface]
+PrivateKey = SBt3+xy10Mo/W2vcUvJ2Bg8UvW1FDcCzM53s3Nz+t0M=
+Address = 10.200.200.2/32
+
+[Peer]
+PublicKey = 5UWn/wdKpxPvIV5A18JZWJUW1zGlXCJmXaR0S5ohNzM=
+Endpoint = 203.0.113.1:51820
+AllowedIPs = 0.0.0.0/0
+`
+
+func newTestVPN(t *testing.T, tunnels map[string]string) *vpnManager {
 	t.Helper()
 
-	log := filepath.Join(t.TempDir(), "calls")
-	script := func(verb, exit string) []string {
-		return []string{"/bin/sh", "-c",
-			"echo " + verb + " {region} >> " + log + "; exit " + exit}
-	}
+	setter, clearer := webViewProxySetter, webViewProxyClearer
+	webViewProxySetter = func(int) error { return nil }
+	webViewProxyClearer = func() error { return nil }
+	t.Cleanup(func() { webViewProxySetter, webViewProxyClearer = setter, clearer })
 
-	m := newVPNManager(&VPNConfig{
-		Up:      script("up", upExit),
-		Down:    script("down", "0"),
-		timeout: 5 * time.Second,
-	})
-
-	return m, func() []string {
-		data, err := os.ReadFile(log)
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			t.Fatalf("reading call log: %v", err)
-		}
-		return strings.Fields(strings.ReplaceAll(strings.TrimSpace(string(data)), "\n", " | "))
-	}
+	m := newVPNManager(&VPNConfig{Tunnels: tunnels})
+	t.Cleanup(m.Close)
+	return m
 }
 
-func calls(t *testing.T, read func() []string) string {
+func writeTestConf(t *testing.T) string {
 	t.Helper()
-	return strings.Join(read(), " ")
+	path := filepath.Join(t.TempDir(), "IT.conf")
+	if err := os.WriteFile(path, []byte(testWireguardConf), 0o644); err != nil {
+		t.Fatalf("writing test conf: %v", err)
+	}
+	return path
 }
 
-func TestVPNEnsureBringsRegionUp(t *testing.T) {
-	m, read := newTestVPN(t, "0")
+func TestVPNEnsureStartsAndRemembersRegion(t *testing.T) {
+	m := newTestVPN(t, map[string]string{"IT": writeTestConf(t)})
 
 	if err := m.Ensure("IT"); err != nil {
 		t.Fatalf("Ensure(IT): %v", err)
@@ -52,150 +57,75 @@ func TestVPNEnsureBringsRegionUp(t *testing.T) {
 	if got := m.Current(); got != "IT" {
 		t.Errorf("Current() = %q, want IT", got)
 	}
-	if got, want := calls(t, read), "up IT"; got != want {
-		t.Errorf("calls = %q, want %q", got, want)
+	if _, ok := m.started["IT"]; !ok {
+		t.Errorf("IT's tunnel was not recorded as started")
 	}
 }
 
 func TestVPNEnsureIsIdempotent(t *testing.T) {
-	m, read := newTestVPN(t, "0")
-
-	for i := range 3 {
-		if err := m.Ensure("IT"); err != nil {
-			t.Fatalf("Ensure(IT) #%d: %v", i, err)
-		}
-	}
-	// The point of tracking the region: re-selecting a channel on the tunnel
-	// already up must not tear it down and rebuild it.
-	if got, want := calls(t, read), "up IT"; got != want {
-		t.Errorf("calls = %q, want a single %q", got, want)
-	}
-}
-
-func TestVPNEnsureSwitchingRegionsLowersTheOldOneFirst(t *testing.T) {
-	m, read := newTestVPN(t, "0")
+	m := newTestVPN(t, map[string]string{"IT": writeTestConf(t)})
 
 	if err := m.Ensure("IT"); err != nil {
 		t.Fatalf("Ensure(IT): %v", err)
 	}
-	if err := m.Ensure("UK"); err != nil {
-		t.Fatalf("Ensure(UK): %v", err)
-	}
+	rt := m.started["IT"]
 
-	if got, want := calls(t, read), "up IT | down IT | up UK"; got != want {
-		t.Errorf("calls = %q, want %q", got, want)
+	if err := m.Ensure("IT"); err != nil {
+		t.Fatalf("second Ensure(IT): %v", err)
 	}
-	if got := m.Current(); got != "UK" {
-		t.Errorf("Current() = %q, want UK", got)
+	if m.started["IT"] != rt {
+		t.Errorf("Ensure(IT) a second time started a new tunnel instead of reusing the existing one")
 	}
 }
 
-func TestVPNEnsureEmptyRegionOnlyLowers(t *testing.T) {
-	m, read := newTestVPN(t, "0")
+func TestVPNEnsureReusesTunnelAcrossSwitches(t *testing.T) {
+	confIT, confUK := writeTestConf(t), writeTestConf(t)
+	m := newTestVPN(t, map[string]string{"IT": confIT, "UK": confUK})
 
 	if err := m.Ensure("IT"); err != nil {
 		t.Fatalf("Ensure(IT): %v", err)
 	}
+	itTunnel := m.started["IT"]
+
 	if err := m.Ensure(""); err != nil {
 		t.Fatalf("Ensure(\"\"): %v", err)
 	}
-
-	if got, want := calls(t, read), "up IT | down IT"; got != want {
-		t.Errorf("calls = %q, want %q", got, want)
-	}
 	if got := m.Current(); got != "" {
-		t.Errorf("Current() = %q, want empty", got)
+		t.Errorf("Current() = %q, want empty after Ensure(\"\")", got)
+	}
+	if _, ok := m.started["IT"]; !ok {
+		t.Errorf("switching away from IT tore its tunnel down; it should stay resident")
+	}
+
+	if err := m.Ensure("IT"); err != nil {
+		t.Fatalf("re-Ensure(IT): %v", err)
+	}
+	if m.started["IT"] != itTunnel {
+		t.Errorf("switching back to IT started a new tunnel instead of reusing the resident one")
 	}
 }
 
-// A failed `up` must not be remembered as success, or the next switch to that
-// region would short-circuit and navigate to an unrouted channel.
-func TestVPNEnsureFailedUpLeavesNoRegion(t *testing.T) {
-	m, _ := newTestVPN(t, "1")
+func TestVPNEnsureUnknownRegion(t *testing.T) {
+	m := newTestVPN(t, map[string]string{"IT": writeTestConf(t)})
 
-	err := m.Ensure("IT")
-	if err == nil {
-		t.Fatal("Ensure(IT) succeeded, want an error from the failing up command")
-	}
-	if got := m.Current(); got != "" {
-		t.Errorf("Current() = %q after a failed up, want empty", got)
+	if err := m.Ensure("UK"); err == nil {
+		t.Fatalf("Ensure(UK) with no matching tunnel: want error, got nil")
 	}
 }
 
-func TestVPNRunTimesOut(t *testing.T) {
-	m := newVPNManager(&VPNConfig{
-		Up:      []string{"/bin/sh", "-c", "sleep 5"},
-		timeout: 100 * time.Millisecond,
-	})
+func TestVPNCloseFreesTheSocks5Port(t *testing.T) {
+	m := newTestVPN(t, map[string]string{"IT": writeTestConf(t)})
 
-	start := time.Now()
-	err := m.Ensure("IT")
-	if err == nil {
-		t.Fatal("Ensure succeeded, want a timeout")
+	if err := m.Ensure("IT"); err != nil {
+		t.Fatalf("Ensure(IT): %v", err)
 	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Errorf("error = %v, want it to mention the timeout", err)
-	}
-	// A blocking `sleep` grandchild does not receive Cancel's SIGINT — only
-	// its parent shell does, and a shell already waiting on a foreground
-	// child defers its trap until that child exits (see the graceful test
-	// below for the case where it does not need to). So this bound has to
-	// cover the full escalation: the context timeout, then vpnShutdownGrace
-	// before WaitDelay forces it closed regardless.
-	if elapsed := time.Since(start); elapsed > 100*time.Millisecond+vpnShutdownGrace+2*time.Second {
-		t.Errorf("took %s, want WaitDelay to have bounded it", elapsed)
-	}
-}
+	port := m.started["IT"].port
 
-// TestVPNRunSignalsGracefullyBeforeKilling checks the actual point of
-// preferring SIGINT to SIGKILL: a script built the way wg-quick is — many
-// short steps rather than one long blocking call — gets to run its own INT
-// trap and exit cleanly, rather than being killed out from under whatever
-// cleanup that trap was going to do.
-func TestVPNRunSignalsGracefullyBeforeKilling(t *testing.T) {
-	dir := t.TempDir()
-	log := filepath.Join(dir, "trapped")
+	m.Close()
 
-	m := newVPNManager(&VPNConfig{
-		Up: []string{"/bin/sh", "-c",
-			`trap 'echo caught >> ` + log + `; exit 0' INT TERM
-			 i=0; while [ $i -lt 200 ]; do i=$((i+1)); sleep 0.05; done`},
-		timeout: 200 * time.Millisecond,
-	})
-
-	start := time.Now()
-	if err := m.Ensure("IT"); err == nil {
-		t.Fatal("Ensure succeeded, want a timeout")
-	}
-	elapsed := time.Since(start)
-
-	data, err := os.ReadFile(log)
-	if err != nil || strings.TrimSpace(string(data)) != "caught" {
-		t.Fatalf("trap did not run (log = %q, err = %v); Cancel is not delivering SIGINT the way wg-quick's own cleanup depends on", data, err)
-	}
-	// The trap exits within one loop iteration (~50ms) of the signal. Nowhere
-	// near needing the 5s WaitDelay grace period is the whole point.
-	if elapsed > 2*time.Second {
-		t.Errorf("took %s to catch the signal and exit, want well under vpnShutdownGrace", elapsed)
-	}
-}
-
-func TestExpandTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
-		t.Skip("no home directory")
+		t.Fatalf("port %d still bound after Close: %v", port, err)
 	}
-
-	for _, tc := range []struct{ in, want string }{
-		{"~/bin/vpn.sh", filepath.Join(home, "bin/vpn.sh")},
-		{"/usr/sbin/scutil", "/usr/sbin/scutil"},
-		{"wg-quick", "wg-quick"},
-		// Only a leading "~/" is a home reference; "~foo" is another user's
-		// home to a shell, and expanding it here would be a guess.
-		{"~foo/bin", "~foo/bin"},
-	} {
-		if got := expandTilde(tc.in); got != tc.want {
-			t.Errorf("expandTilde(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
+	ln.Close()
 }

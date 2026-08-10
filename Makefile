@@ -16,7 +16,7 @@ CONTENTS := $(APP)/Contents
 # "TV View" next to "Quit TV View" rather than the process name.
 BUNDLE_NAME := TV View
 BUNDLE_ID   := io.github.raff.tvview
-MIN_MACOS   := 10.13
+MIN_MACOS   := 14.0
 VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0)
 
 LDFLAGS := -s -w

@@ -195,13 +195,6 @@ func (a *app) selectChannel(url string) {
 func (a *app) enterChannel(url string) {
 	region := a.regionFor(url)
 
-	// A channel with no region leaves an existing tunnel alone unless the
-	// config asked otherwise.
-	if region == "" && !a.cfg.VPN.Disconnects() {
-		a.navigate(url)
-		return
-	}
-
 	if region == "" {
 		a.showVPN("working", "Disconnecting…")
 	} else {
@@ -281,32 +274,28 @@ func (a *app) windowTitle(url string) string {
 	return a.cfg.Window.Title
 }
 
-// quitVPNGrace bounds how long shutdown waits for the tunnel to come down.
-// Long enough for a normal `wg-quick down`, which is ordinarily near-instant;
-// short enough that a stuck one does not make Quit itself look hung. Past it,
-// shutdown gives up and lets the process exit anyway — the teardown may still
-// be running, orphaned, and finish a moment later on its own. That is fine;
-// it is exactly how the tunnel's own DNS-restoring daemon already behaves
-// (see README, "Watching from another country").
+// quitVPNGrace bounds how long shutdown waits for tunnels to close. Closing
+// a userspace WireGuard device is in-process — nothing is shelled out to,
+// unlike the old wg-quick backend — so this is insurance against something
+// inside wireguard-go itself blocking, not a real expectation of needing
+// the full budget.
 const quitVPNGrace = 3 * time.Second
 
 // shutdown is the one seam a platform's quit handling calls into before it
 // actually ends the process. It exists so quit_darwin.go — AppKit quit-button
 // mechanics, not VPN policy — never needs to know a VPN exists; it just calls
-// this. Safe to call whether or not a VPN is configured, or one is even up.
+// this. Safe to call whether or not a VPN is configured, or any tunnel was
+// ever started.
 func (a *app) shutdown() {
-	if a.vpn == nil || a.vpn.Current() == "" {
+	if a.vpn == nil {
 		return
 	}
 
-	done := make(chan error, 1)
-	go func() { done <- a.vpn.Ensure("") }()
+	done := make(chan struct{})
+	go func() { a.vpn.Close(); close(done) }()
 
 	select {
-	case err := <-done:
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "tvview: vpn teardown on quit:", err)
-		}
+	case <-done:
 	case <-time.After(quitVPNGrace):
 		fmt.Fprintf(os.Stderr, "tvview: vpn teardown did not finish within %s; quitting anyway\n", quitVPNGrace)
 	}

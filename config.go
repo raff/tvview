@@ -8,15 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
-
-// defaultVPNTimeout bounds a single up or down command. Generous: a tunnel
-// that negotiates in two seconds on a good night can take fifteen on a bad
-// one, and killing it early leaves the machine half-routed.
-const defaultVPNTimeout = 60 * time.Second
 
 // defaultConfig is used when no config file is found on disk, so the app
 // always starts with something to show.
@@ -44,36 +38,23 @@ type Channel struct {
 	Title string `yaml:"title" json:"title"`
 	URL   string `yaml:"url"   json:"url"`
 
-	// Region is the VPN region this channel needs, substituted into the
-	// vpn.up/vpn.down commands as {region}. Empty means the channel is
-	// watched without a tunnel. Meaningless without a vpn block, which
-	// parseConfig rejects rather than silently ignores.
+	// Region is the VPN region this channel needs, which must match a key
+	// in vpn.tunnels. Empty means the channel is watched without a tunnel.
+	// Meaningless without a vpn block, which parseConfig rejects rather
+	// than silently ignores.
 	Region string `yaml:"region" json:"region"`
 }
 
-// VPNConfig says how to raise and lower a tunnel. The commands are run
-// directly — no shell, so no globbing, quoting or $VARS — with {region}
-// replaced in every argument.
+// VPNConfig maps each VPN region to the wireguard config file that raises
+// its tunnel. See vpn_wireproxy_darwin.go: each tunnel is a userspace
+// WireGuard client (via the embedded wireproxy library) exposed only as a
+// local SOCKS5 proxy that this app's WKWebViews are pointed at — no root,
+// no system routes.
 type VPNConfig struct {
-	Up   []string `yaml:"up"   json:"-"`
-	Down []string `yaml:"down" json:"-"`
-
-	// Timeout bounds a single up or down command, as a Go duration string.
-	Timeout string `yaml:"timeout" json:"-"`
-
-	// AutoDisconnect brings the tunnel down when switching to a channel that
-	// names no region. A pointer so an unset key can default to true: the
-	// alternative is a tunnel that outlives the one channel that wanted it
-	// and quietly routes the rest of the evening through another country.
-	AutoDisconnect *bool `yaml:"auto_disconnect" json:"-"`
-
-	timeout time.Duration
-}
-
-// Disconnects reports whether a region-less channel should tear the tunnel
-// down, applying the default for an unset key.
-func (v *VPNConfig) Disconnects() bool {
-	return v.AutoDisconnect == nil || *v.AutoDisconnect
+	// Tunnels maps a region name (matched against Channel.Region) to a
+	// wireguard .conf file — the same [Interface]/[Peer] file downloaded
+	// from the VPN provider, unmodified.
+	Tunnels map[string]string `yaml:"tunnels" json:"-"`
 }
 
 // WindowConfig controls the host window.
@@ -299,38 +280,49 @@ func (cfg *Config) checkVPN(path string) error {
 		return nil
 	}
 
-	if len(cfg.VPN.Up) == 0 {
-		return fmt.Errorf("%s: vpn needs an up command", describePath(path))
-	}
-	// A missing down would let vpnManager.Ensure mark a region torn down
-	// without running anything — the tunnel stays up, believed gone. That
-	// belief is what the rest of the app's switching and auto_disconnect
-	// logic relies on, so silently accepting no down is worse than refusing.
-	if len(cfg.VPN.Down) == 0 {
-		return fmt.Errorf("%s: vpn needs a down command", describePath(path))
+	if len(cfg.VPN.Tunnels) == 0 {
+		return fmt.Errorf("%s: vpn needs at least one entry under tunnels", describePath(path))
 	}
 
-	cfg.VPN.timeout = defaultVPNTimeout
-	if s := strings.TrimSpace(cfg.VPN.Timeout); s != "" {
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return fmt.Errorf("%s: vpn timeout %q: %w", describePath(path), s, err)
-		}
-		if d <= 0 {
-			return fmt.Errorf("%s: vpn timeout must be positive, got %s", describePath(path), s)
-		}
-		cfg.VPN.timeout = d
+	resolved := make(map[string]string, len(cfg.VPN.Tunnels))
+	for region, p := range cfg.VPN.Tunnels {
+		resolved[region] = expandTilde(strings.TrimSpace(p))
 	}
+	cfg.VPN.Tunnels = resolved
 
+	// A region with no matching tunnel is a config mistake that would
+	// otherwise fail deep inside vpnManager instead of at startup — same
+	// reasoning as the no-vpn-block case above.
+	used := false
+	for _, c := range cfg.Channels {
+		if c.Region == "" {
+			continue
+		}
+		used = true
+		if _, ok := cfg.VPN.Tunnels[c.Region]; !ok {
+			return fmt.Errorf("%s: channel %q sets region %q but vpn.tunnels has no entry for it",
+				describePath(path), c.Title, c.Region)
+		}
+	}
 	// A vpn block no channel uses is more likely a half-finished edit than an
 	// intention, and it costs nothing to say so.
-	for _, c := range cfg.Channels {
-		if c.Region != "" {
-			return nil
-		}
+	if !used {
+		fmt.Fprintf(os.Stderr, "tvview: %s configures a vpn but no channel sets a region\n", describePath(path))
 	}
-	fmt.Fprintf(os.Stderr, "tvview: %s configures a vpn but no channel sets a region\n", describePath(path))
 	return nil
+}
+
+// expandTilde resolves a leading ~/ so channels.yaml can point a wireguard
+// config at a file in the home directory, e.g. ~/.config/tvview/IT.conf.
+func expandTilde(path string) string {
+	if !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[2:])
 }
 
 func describePath(path string) string {
