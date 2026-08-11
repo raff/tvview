@@ -81,6 +81,9 @@ config:
 	-mkdir -p $(HOME)/.config/tvview
 	cp channels.yaml $(HOME)/.config/tvview/channels.yaml
 
+diff-config:
+	diff channels.yaml $(HOME)/.config/tvview/channels.yaml
+
 clean:
 	rm -rf $(APP) $(BINARY) $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal
 
