@@ -13,9 +13,9 @@ import (
 // testWireguardConf is a syntactically valid but unreachable wireguard
 // config — a TEST-NET-3 (RFC 5737) endpoint that will never answer, and a
 // key pair that's the right shape (32 random bytes, base64) without being a
-// real registered peer. Good enough to exercise ParseConfig/StartWireguard/
-// spawnSocks5 end to end: none of them wait for a handshake, only for the
-// local netstack device and SOCKS5 listener to come up.
+// real registered peer. Its content no longer matters to these tests (see
+// newTestVPN's raiseKernelTunnel stub below) but a real path still needs to
+// exist for tunnelFor's own map lookup.
 const testWireguardConf = `[Interface]
 PrivateKey = SBt3+xy10Mo/W2vcUvJ2Bg8UvW1FDcCzM53s3Nz+t0M=
 Address = 10.200.200.2/32
@@ -26,6 +26,12 @@ Endpoint = 203.0.113.1:51820
 AllowedIPs = 0.0.0.0/0
 `
 
+// newTestVPN stubs out both the WKWebView proxy calls and the actual
+// tunnel-raising: the real path needs a one-time admin-privilege prompt
+// (vpnhelper) and a live WireGuard peer, neither of which a `go test` run
+// can provide. The fake tunnel it substitutes still binds a real port, so
+// tests that check port lifecycle (e.g. TestVPNCloseFreesTheSocks5Port)
+// still exercise real behavior.
 func newTestVPN(t *testing.T, tunnels map[string]string) *vpnManager {
 	t.Helper()
 
@@ -33,6 +39,16 @@ func newTestVPN(t *testing.T, tunnels map[string]string) *vpnManager {
 	webViewProxySetter = func(int) error { return nil }
 	webViewProxyClearer = func() error { return nil }
 	t.Cleanup(func() { webViewProxySetter, webViewProxyClearer = setter, clearer })
+
+	raise := raiseKernelTunnel
+	raiseKernelTunnel = func(string) (*regionTunnelKernel, error) {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, err
+		}
+		return &regionTunnelKernel{ln: ln, port: ln.Addr().(*net.TCPAddr).Port}, nil
+	}
+	t.Cleanup(func() { raiseKernelTunnel = raise })
 
 	m := newVPNManager(&VPNConfig{Tunnels: tunnels})
 	t.Cleanup(m.Close)

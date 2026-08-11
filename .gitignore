@@ -2,12 +2,16 @@ wv
 
 # go build with no -o drops the binary here, next to the source
 /tvview
+/vpnhelper
 
 # make app / make universal
 /TVView.app/
 /tvview-amd64
 /tvview-arm64
 /tvview-universal
+/vpnhelper-amd64
+/vpnhelper-arm64
+/vpnhelper-universal
 
 # macOS
 .DS_Store

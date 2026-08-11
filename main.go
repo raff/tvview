@@ -275,10 +275,10 @@ func (a *app) windowTitle(url string) string {
 }
 
 // quitVPNGrace bounds how long shutdown waits for tunnels to close. Closing
-// a userspace WireGuard device is in-process — nothing is shelled out to,
-// unlike the old wg-quick backend — so this is insurance against something
-// inside wireguard-go itself blocking, not a real expectation of needing
-// the full budget.
+// one is in-process — dev.Close() on a device already holding its kernel
+// interface's fd, nothing shelled out to and no separate process to wait
+// on — so this is insurance against something inside wireguard-go itself
+// blocking, not a real expectation of needing the full budget.
 const quitVPNGrace = 3 * time.Second
 
 // shutdown is the one seam a platform's quit handling calls into before it

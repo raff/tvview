@@ -4,21 +4,18 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"sync"
-
-	"github.com/things-go/go-socks5"
-	"github.com/things-go/go-socks5/bufferpool"
-	"github.com/windtf/wireproxy"
-	"golang.zx2c4.com/wireguard/device"
 )
 
-// vpnManager owns one userspace WireGuard tunnel per region (via the
-// embedded wireproxy library), each exposed as a local SOCKS5 proxy, and
-// points [WKWebsiteDataStore defaultDataStore] (vpn_proxy_darwin.go) at
-// whichever one is current. No root, no system routes, no wg-quick — see
-// README, "Watching from another country".
+// vpnManager owns one WireGuard tunnel per region, each on its own real
+// kernel utun(4) interface (vpn_kernel_darwin.go) exposed as a local SOCKS5
+// proxy, and points [WKWebsiteDataStore defaultDataStore]
+// (vpn_proxy_darwin.go) at whichever one is current. No system routes, no
+// wg-quick, and no part of tvview's own long-running process ever runs as
+// root — the one privileged operation (raising the interface) lives in the
+// short-lived, single-purpose vpnhelper (cmd/vpnhelper), which hands back
+// an open device and exits. See README, "Watching from another country".
 //
 // A tunnel is started lazily on first use and then left running until the
 // process exits; Ensure never tears one down on a channel switch. The old
@@ -33,14 +30,8 @@ type vpnManager struct {
 	tunnels map[string]string // region -> wireguard .conf path, from VPNConfig.Tunnels
 
 	mu      sync.Mutex
-	started map[string]*regionTunnel
+	started map[string]*regionTunnelKernel
 	current string
-}
-
-type regionTunnel struct {
-	vt   *wireproxy.VirtualTun
-	ln   net.Listener
-	port int
 }
 
 // webViewProxySetter/webViewProxyClearer indirect setWebViewProxy/
@@ -57,7 +48,7 @@ func newVPNManager(cfg *VPNConfig) *vpnManager {
 	if cfg == nil {
 		return nil
 	}
-	return &vpnManager{tunnels: cfg.Tunnels, started: map[string]*regionTunnel{}}
+	return &vpnManager{tunnels: cfg.Tunnels, started: map[string]*regionTunnelKernel{}}
 }
 
 // Current is the region the WKWebView proxy is pointed at, or "" for none.
@@ -98,8 +89,10 @@ func (m *vpnManager) Ensure(region string) error {
 }
 
 // tunnelFor returns region's tunnel, starting it on first use. Called with
-// mu held.
-func (m *vpnManager) tunnelFor(region string) (*regionTunnel, error) {
+// mu held. The actual work — parsing the .conf, raising a real kernel
+// interface for it via vpnhelper, and standing up a local SOCKS5 proxy
+// scoped to that interface — lives in vpn_kernel_darwin.go.
+func (m *vpnManager) tunnelFor(region string) (*regionTunnelKernel, error) {
 	if rt, ok := m.started[region]; ok {
 		return rt, nil
 	}
@@ -109,54 +102,13 @@ func (m *vpnManager) tunnelFor(region string) (*regionTunnel, error) {
 		return nil, fmt.Errorf("no wireguard config for region %q", region)
 	}
 
-	conf, err := wireproxy.ParseConfig(path)
-	if err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
-	}
-
-	vt, err := wireproxy.StartWireguard(conf, device.LogLevelError)
+	rt, err := raiseKernelTunnel(path)
 	if err != nil {
 		return nil, fmt.Errorf("starting wireguard for %s: %w", region, err)
 	}
 
-	ln, port, err := spawnSocks5(vt)
-	if err != nil {
-		vt.Dev.Close()
-		return nil, fmt.Errorf("starting socks5 proxy for %s: %w", region, err)
-	}
-
-	rt := &regionTunnel{vt: vt, ln: ln, port: port}
 	m.started[region] = rt
 	return rt, nil
-}
-
-// spawnSocks5 starts a SOCKS5 server tunneled through vt on a free local
-// port. This mirrors wireproxy.Socks5Config.SpawnRoutine, but binds the
-// listener here first instead of handing wireproxy a bind address:
-// SpawnRoutine calls log.Fatal on a listen failure, which would take the
-// whole app down over what's usually just an unlucky ephemeral-port race.
-// Binding ourselves also means the user's wireguard .conf needs no
-// [Socks5] section at all — just the bare [Interface]/[Peer] exactly as
-// downloaded from the VPN provider.
-func spawnSocks5(vt *wireproxy.VirtualTun) (net.Listener, int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, 0, err
-	}
-
-	server := socks5.NewServer(
-		socks5.WithDial(vt.Tnet.DialContext),
-		socks5.WithResolver(vt),
-		socks5.WithAuthMethods([]socks5.Authenticator{socks5.NoAuthAuthenticator{}}),
-		socks5.WithBufferPool(bufferpool.NewPool(256*1024)),
-	)
-	go func() {
-		if err := server.Serve(ln); err != nil {
-			fmt.Fprintln(os.Stderr, "tvview: socks5 server exited:", err)
-		}
-	}()
-
-	return ln, ln.Addr().(*net.TCPAddr).Port, nil
 }
 
 // Close tears down every tunnel that was ever started and clears the
@@ -166,8 +118,7 @@ func (m *vpnManager) Close() {
 	defer m.mu.Unlock()
 
 	for region, rt := range m.started {
-		rt.ln.Close()
-		rt.vt.Dev.Close()
+		rt.Close()
 		delete(m.started, region)
 	}
 	if m.current != "" {

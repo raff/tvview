@@ -153,6 +153,14 @@ func seedUserConfig() (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
+	// Best-effort: wireguard/ is where the commented-out example in
+	// defaultConfig points VPN .conf files, so having it already exist
+	// saves a manual mkdir before the first one is dropped in. Its absence
+	// isn't fatal to starting, same reasoning as the channels.yaml write
+	// below.
+	if err := os.MkdirAll(filepath.Join(dir, "wireguard"), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "tvview: could not create wireguard config directory:", err)
+	}
 
 	// O_EXCL rather than checking first: the check-then-write habit is not
 	// worth forming, even where nothing else is racing us.

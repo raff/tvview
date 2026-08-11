@@ -8,6 +8,7 @@
 GO ?= go
 
 BINARY   := tvview
+HELPER   := vpnhelper
 APP      := TVView.app
 CONTENTS := $(APP)/Contents
 
@@ -27,10 +28,11 @@ all: build
 
 build:
 	$(GO) build -ldflags '$(LDFLAGS)' -o $(BINARY) .
+	$(GO) build -ldflags '$(LDFLAGS)' -o $(HELPER) ./cmd/vpnhelper
 
 ## app: bundle for this machine's architecture.
 app: build
-	@$(MAKE) --no-print-directory bundle EXE=$(BINARY)
+	@$(MAKE) --no-print-directory bundle EXE=$(BINARY) HELPER_EXE=$(HELPER)
 	@echo "built $(APP) ($(shell uname -m), $(VERSION))"
 
 ## universal: one bundle that runs on both Intel and Apple Silicon.
@@ -38,23 +40,29 @@ app: build
 # Each slice is compiled separately because go-webview selects its embedded
 # native library by GOARCH at compile time — a slice carries the dylib for its
 # own architecture, so lipo has to join finished binaries rather than the Go
-# build producing a fat one.
+# build producing a fat one. vpnhelper carries no such native dependency, but
+# it's joined the same way for consistency and a single lipo pass.
 universal:
 	GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(BINARY)-amd64 .
 	GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(BINARY)-arm64 .
+	GOARCH=amd64 $(GO) build -ldflags '$(LDFLAGS)' -o $(HELPER)-amd64 ./cmd/vpnhelper
+	GOARCH=arm64 $(GO) build -ldflags '$(LDFLAGS)' -o $(HELPER)-arm64 ./cmd/vpnhelper
 	lipo -create -output $(BINARY)-universal $(BINARY)-amd64 $(BINARY)-arm64
-	@$(MAKE) --no-print-directory bundle EXE=$(BINARY)-universal
-	@rm -f $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal
+	lipo -create -output $(HELPER)-universal $(HELPER)-amd64 $(HELPER)-arm64
+	@$(MAKE) --no-print-directory bundle EXE=$(BINARY)-universal HELPER_EXE=$(HELPER)-universal
+	@rm -f $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal $(HELPER)-amd64 $(HELPER)-arm64 $(HELPER)-universal
 	@echo "built $(APP) (universal, $(VERSION))"
 	@lipo -archs $(APP)/Contents/MacOS/$(BINARY)
 
-## bundle: assemble $(APP) around an already-built EXE. Shared by app and
-## universal; not meant to be called directly.
+## bundle: assemble $(APP) around an already-built EXE and HELPER_EXE. Shared
+## by app and universal; not meant to be called directly.
 bundle:
 	@test -n "$(EXE)" || { echo "bundle: EXE not set"; exit 1; }
+	@test -n "$(HELPER_EXE)" || { echo "bundle: HELPER_EXE not set"; exit 1; }
 	rm -rf $(APP)
 	mkdir -p $(CONTENTS)/MacOS $(CONTENTS)/Resources
 	cp $(EXE) $(CONTENTS)/MacOS/$(BINARY)
+	cp $(HELPER_EXE) $(CONTENTS)/MacOS/$(HELPER)
 	printf 'APPL????' > $(CONTENTS)/PkgInfo
 	echo "$$INFO_PLIST" > $(CONTENTS)/Info.plist
 	@plutil -lint $(CONTENTS)/Info.plist
@@ -65,8 +73,13 @@ bundle:
 	else \
 		echo "note: no icon.icns found, the bundle gets the generic icon"; \
 	fi
-	@# Ad-hoc signature. Enough for this machine; not a distributable one —
-	@# other Macs still need a Developer ID and notarisation.
+	@# vpnhelper is signed on its own, before the bundle: it's invoked
+	@# directly by osascript (not launched as part of the app), so it's the
+	@# name macOS's admin-privileges prompt actually shows the user.
+	@# Ad-hoc signatures throughout — enough for this machine; not
+	@# distributable ones, other Macs still need a Developer ID and
+	@# notarisation.
+	codesign --force --sign - $(CONTENTS)/MacOS/$(HELPER)
 	codesign --force --sign - $(APP)
 
 run: app
@@ -78,7 +91,7 @@ install: app
 	@echo "installed /Applications/$(APP)"
 
 config:
-	-mkdir -p $(HOME)/.config/tvview
+	-mkdir -p $(HOME)/.config/tvview/wireguard
 	cp channels.yaml $(HOME)/.config/tvview/channels.yaml
 
 diff-config:
@@ -86,6 +99,7 @@ diff-config:
 
 clean:
 	rm -rf $(APP) $(BINARY) $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal
+	rm -rf $(HELPER) $(HELPER)-amd64 $(HELPER)-arm64 $(HELPER)-universal
 
 define INFO_PLIST
 <?xml version="1.0" encoding="UTF-8"?>
