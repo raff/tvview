@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -60,10 +61,11 @@ func helperPath() (string, error) {
 	return p, nil
 }
 
-// raiseKernelInterface asks vpnhelper, elevated via a one-time macOS admin
-// prompt, to create and configure a real utun device with addrs and mtu. It
-// returns the device wrapped for wireguard-go and its kernel interface
-// index, without ever having run any of tvview's own code as root.
+// raiseKernelInterface asks vpnhelper to create and configure a real utun
+// device with addrs and mtu, elevating it via runHelper (passwordless sudo
+// when set up, a one-time macOS admin prompt otherwise). It returns the
+// device wrapped for wireguard-go and its kernel interface index, without
+// ever having run any of tvview's own code as root.
 func raiseKernelInterface(addrs []netip.Addr, mtu int) (tun.Device, int, error) {
 	help, err := helperPath()
 	if err != nil {
@@ -80,21 +82,9 @@ func raiseKernelInterface(addrs []netip.Addr, mtu int) (tun.Device, int, error) 
 	defer ln.Close()
 
 	args := append([]string{help, sockPath, fmt.Sprint(mtu)}, addrStrings(addrs)...)
-	cmd := exec.Command("osascript", "-e", "do shell script "+shellQuoteArgs(args)+" with administrator privileges")
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return nil, 0, fmt.Errorf("starting vpnhelper: %w", err)
-	}
-
-	// Generous: this deadline covers however long the user takes to notice
-	// and answer macOS's admin-password dialog, not just vpnhelper's own
-	// (near-instant) work once authorized.
-	if err := ln.(*net.UnixListener).SetDeadline(time.Now().Add(5 * time.Minute)); err != nil {
-		return nil, 0, err
-	}
-	fdConn, err := ln.Accept()
+	fdConn, err := runHelper(ln.(*net.UnixListener), args)
 	if err != nil {
-		return nil, 0, fmt.Errorf("waiting for vpnhelper: %w", err)
+		return nil, 0, err
 	}
 	uc := fdConn.(*net.UnixConn)
 	defer uc.Close()
@@ -118,7 +108,6 @@ func raiseKernelInterface(addrs []netip.Addr, mtu int) (tun.Device, int, error) 
 
 	// vpnhelper has handed off the fd and is exiting; nothing further of
 	// tvview's ever ran privileged.
-	_ = cmd.Wait()
 
 	tunFile := os.NewFile(uintptr(fds[0]), name)
 	tunDev, err := tun.CreateTUNFromFile(tunFile, 0) // address+MTU already set by vpnhelper
@@ -133,6 +122,81 @@ func raiseKernelInterface(addrs []netip.Addr, mtu int) (tun.Device, int, error) 
 	}
 
 	return tunDev, iface.Index, nil
+}
+
+// runHelper runs vpnhelper (args[0], with its own arguments following) as
+// root and returns the connection it makes back to ln, over which it hands
+// off the tun device's fd (see the file-level doc comment above).
+//
+// It tries `sudo -n` first — passwordless once
+// scripts/install-vpn-helper.sh's NOPASSWD sudoers.d rule for this exact
+// vpnhelper path is installed (or while sudo's own short-lived credential
+// cache is still warm) — and falls back to the interactive macOS
+// admin-password prompt (osascript) otherwise, exactly as before this rule
+// existed. `sudo -n` fails in well under a second, without ever touching a
+// terminal or showing a GUI prompt, when neither applies, so there's no
+// double-prompt or delay in the fallback case.
+func runHelper(ln *net.UnixListener, args []string) (net.Conn, error) {
+	sudoOK, err := trySudoNonInteractive(args)
+	if err != nil {
+		return nil, err
+	}
+	if sudoOK {
+		if err := ln.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			return nil, err
+		}
+		fdConn, err := ln.Accept()
+		if err != nil {
+			return nil, fmt.Errorf("waiting for vpnhelper: %w", err)
+		}
+		return fdConn, nil
+	}
+
+	cmd := exec.Command("osascript", "-e", "do shell script "+shellQuoteArgs(args)+" with administrator privileges")
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("starting vpnhelper: %w", err)
+	}
+
+	// Generous: this deadline covers however long the user takes to notice
+	// and answer macOS's admin-password dialog, not just vpnhelper's own
+	// (near-instant) work once authorized.
+	if err := ln.SetDeadline(time.Now().Add(5 * time.Minute)); err != nil {
+		return nil, err
+	}
+	fdConn, err := ln.Accept()
+	if err != nil {
+		return nil, fmt.Errorf("waiting for vpnhelper: %w", err)
+	}
+	_ = cmd.Wait()
+	return fdConn, nil
+}
+
+// trySudoNonInteractive runs vpnhelper (args[0]) as root via `sudo -n` and
+// blocks until it exits — safe to block on rather than racing it against
+// ln.Accept, since vpnhelper dials the caller's already-listening socket and
+// exits right after handing off its fd, without waiting for that socket's
+// Accept to have run yet (the connection just sits in the kernel's listen
+// backlog until then).
+//
+// ok is true only when vpnhelper actually ran as root; it's false, with a
+// nil error, specifically when sudo couldn't authenticate non-interactively
+// (no sudoers rule installed yet, or its credential cache lapsed) — the one
+// case runHelper should fall back to the interactive prompt for. Any other
+// failure (e.g. vpnhelper itself hit an ifconfig error) is returned as an
+// error instead, so a real problem isn't masked by a pointless second
+// prompt.
+func trySudoNonInteractive(args []string) (ok bool, err error) {
+	var stderr bytes.Buffer
+	cmd := exec.Command("sudo", append([]string{"-n"}, args...)...)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err == nil {
+		return true, nil
+	} else if strings.Contains(strings.ToLower(stderr.String()), "password is required") {
+		return false, nil
+	} else {
+		return false, fmt.Errorf("running vpnhelper: %w: %s", err, stderr.String())
+	}
 }
 
 func addrStrings(addrs []netip.Addr) []string {
@@ -227,9 +291,9 @@ func (r *tunnelResolver) Resolve(ctx context.Context, name string) (context.Cont
 // device, exposed as a local SOCKS5 proxy exactly like regionTunnel is for
 // the netstack backend — see vpn_wireproxy_darwin.go.
 type regionTunnelKernel struct {
-	dev *device.Device
-	tun tun.Device
-	ln  net.Listener
+	dev  *device.Device
+	tun  tun.Device
+	ln   net.Listener
 	port int
 }
 

@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper clean
 
 all: build
 
@@ -89,6 +89,16 @@ install: app
 	rm -rf /Applications/$(APP)
 	cp -R $(APP) /Applications/
 	@echo "installed /Applications/$(APP)"
+
+## install-vpn-helper: let vpnhelper run without a password prompt every
+## time, by installing a sudoers.d rule scoped to this exact binary path.
+## One-time (needs re-running only if the app moves); see the script for
+## details, and uninstall-vpn-helper to undo it.
+install-vpn-helper:
+	sudo ./scripts/install-vpn-helper.sh /Applications/$(APP)
+
+uninstall-vpn-helper:
+	sudo ./scripts/uninstall-vpn-helper.sh
 
 config:
 	-mkdir -p $(HOME)/.config/tvview/wireguard

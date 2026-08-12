@@ -237,6 +237,16 @@ a given launch; the interface then stays up for the rest of the session (see
 below), so switching back and forth between, say, RaiPlay and BBC iPlayer only
 ever asks once each.
 
+If even that occasional prompt is annoying — it recurs on every fresh launch,
+once per region touched — `make install-vpn-helper` installs a `sudoers.d`
+rule scoped to this exact `vpnhelper` binary path for your account only
+(`scripts/install-vpn-helper.sh`; asks for your password once, in the
+terminal, to install it). After that, tvview elevates it via passwordless
+`sudo -n` instead and you won't see any prompt at all; if the rule isn't
+installed (or stops matching, e.g. after moving the app), it silently falls
+back to the `osascript` dialog above, so this is purely optional. `make
+uninstall-vpn-helper` removes the rule.
+
 #### Why WireGuard and not IKEv2
 
 The obvious macOS answer is a native IKEv2 profile per country plus
@@ -603,6 +613,7 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `vpn_proxy_darwin.go` | Points `WKWebsiteDataStore`'s `proxyConfigurations` at a tunnel's local SOCKS5 port |
 | `cmd/vpnhelper/main.go` | The one privileged binary: raises and configures a real kernel interface, hands it off, exits |
 | `Makefile`      | Builds `TVView.app`, thin or universal, `vpnhelper` included  |
+| `scripts/install-vpn-helper.sh` | Optional: sudoers.d rule so `vpnhelper` elevates passwordlessly instead of prompting via `osascript` (see [The privileged helper](#the-privileged-helper)) |
 
 ### Bindings exposed to the page
 
