@@ -266,12 +266,19 @@ func (a *app) toggleSidebar() {
 }
 
 func (a *app) windowTitle(url string) string {
+	title := a.cfg.Window.Title
 	for _, c := range a.cfg.Channels {
 		if c.URL == url {
-			return a.cfg.Window.Title + " — " + c.Title
+			title += " — " + c.Title
+			break
 		}
 	}
-	return a.cfg.Window.Title
+	if a.vpn != nil {
+		if region := a.vpn.Current(); region != "" {
+			title += "  [VPN " + region + "]"
+		}
+	}
+	return title
 }
 
 // quitVPNGrace bounds how long shutdown waits for tunnels to close. Closing
