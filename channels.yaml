@@ -71,6 +71,12 @@ channels:
     url: https://www.bbc.co.uk/iplayer
     region: UK
 
+  - title: Hulu
+    url: https://hulu.com
+
+  - title: HBO Max
+    url: https://hbomax.com
+
   - title: NASA+
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 
