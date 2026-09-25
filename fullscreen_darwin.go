@@ -17,7 +17,39 @@ var (
 	selSetAutoresizingMask    = objc.RegisterName("setAutoresizingMask:")
 	selBounds                 = objc.RegisterName("bounds")
 	selRetain                 = objc.RegisterName("retain")
+	selSetValueForKey         = objc.RegisterName("setValue:forKey:")
+	selNumberWithBool         = objc.RegisterName("numberWithBool:")
 )
+
+// blackBackground keeps the window black until a page has painted. The web
+// view draws opaque white until its first page is ready, which is a long
+// flash when the first thing to happen is a tunnel negotiation. Turning its
+// drawsBackground off lets the black window and container show through; pages
+// paint their own background over it as soon as they load.
+//
+// Must run on the main thread, after hostWebView.
+func (a *app) blackBackground() {
+	view := a.webView()
+	window := objc.ID(uintptr(a.w.Window()))
+	classColor := objc.GetClass("NSColor")
+	classNumber := objc.GetClass("NSNumber")
+	if view == 0 || window == 0 || classColor == 0 || classNumber == 0 {
+		return
+	}
+
+	black := objc.ID(classColor).Send(selColorWhiteAlpha, 0.0, 1.0)
+	window.Send(selSetBackgroundCol, black)
+
+	if container := window.Send(selContentView); container != 0 && container != view {
+		container.Send(selSetWantsLayer, true)
+		if layer := container.Send(selLayer); layer != 0 {
+			layer.Send(selSetBackgroundCol, black.Send(selCGColor))
+		}
+	}
+
+	no := objc.ID(classNumber).Send(selNumberWithBool, false)
+	view.Send(selSetValueForKey, no, nsString("drawsBackground"))
+}
 
 // hostWebView puts a plain NSView between the window and the WKWebView, and
 // reports whether it could.

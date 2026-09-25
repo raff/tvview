@@ -27,6 +27,7 @@ type app struct {
 	mu      sync.Mutex
 	open    bool
 	current string
+	vpnSt   map[string]string // last showVPN state, replayed to pages that load mid-negotiation
 }
 
 func main() {
@@ -87,6 +88,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "tvview: could not re-home the web view; fullscreen may leave the window wrong")
 	}
 
+	a.blackBackground()
+
 	// Before the first Navigate: the User-Agent is read as the page loads.
 	// Not fatal if it does not take — the app is still usable, just back to
 	// stalling on the channels that made us want this.
@@ -124,7 +127,7 @@ func (a *app) bind() error {
 		{"wvState", func() map[string]any {
 			a.mu.Lock()
 			defer a.mu.Unlock()
-			return map[string]any{"open": a.open, "current": a.current}
+			return map[string]any{"open": a.open, "current": a.current, "vpn": a.vpnSt}
 		}},
 		{"wvSelect", func(url string) { a.selectChannel(url) }},
 		{"wvSetOpen", func(open bool) {
@@ -181,6 +184,9 @@ func (a *app) selectChannel(url string) {
 	saveLastChannel(url)
 
 	if a.vpn == nil || a.regionFor(url) == a.vpn.Current() {
+		a.mu.Lock()
+		a.vpnSt = nil // a stale error must not follow us to the new page
+		a.mu.Unlock()
 		a.navigate(url)
 		return
 	}
@@ -221,13 +227,20 @@ func (a *app) enterChannel(url string) {
 		return
 	}
 
-	a.showVPN("idle", "")
+	// The old page stays on screen until the new one commits, and a slow
+	// channel can take seconds after the tunnel is up. Keep the spinner
+	// through that gap; navigate drops the remembered state so the new page
+	// does not inherit it.
+	a.showVPN("working", "Loading…")
 	a.navigate(url)
 }
 
 // navigate moves the web view. Never called from inside a binding callback
 // without Dispatch: navigating from the JS thread deadlocks the web view.
 func (a *app) navigate(url string) {
+	a.mu.Lock()
+	a.vpnSt = nil
+	a.mu.Unlock()
 	a.w.Dispatch(func() {
 		a.w.SetTitle(a.windowTitle(url))
 		a.w.Navigate(url)
@@ -251,6 +264,12 @@ func (a *app) showVPN(state, text string) {
 	if err != nil {
 		return
 	}
+	// The page may not exist yet (startup) or be about to be replaced, so the
+	// eval alone can be lost. Remember the state; wvState hands it to pages.
+	a.mu.Lock()
+	a.vpnSt = map[string]string{"state": state, "text": text}
+	a.mu.Unlock()
+
 	a.w.Dispatch(func() {
 		a.w.Eval("window.wvVPN && window.wvVPN(" + string(msg) + ");")
 	})

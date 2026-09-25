@@ -135,28 +135,28 @@
     "  color: #9ecbff; background: rgba(91,157,255,0.16);",
     "}",
 
-    // Status while a tunnel comes up. Centred at the top rather than in the
-    // panel: the panel is usually shut by then, and this is the only sign
-    // that the blank pause is doing something.
+    // Status while a tunnel comes up. Centred on the page, in a lighter box:
+    // the page behind is usually black, and this is the only sign that the
+    // pause is doing something.
     ".vpn {",
-    "  position: fixed; top: 18px; left: 50%;",
-    "  transform: translateX(-50%); max-width: 70vw;",
-    "  display: none; align-items: center; gap: 9px;",
-    "  padding: 10px 16px;",
-    "  font: 13px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
-    "  color: #e9e9ee;",
-    "  background: rgba(16,16,20,0.94);",
+    "  position: fixed; top: 50%; left: 50%;",
+    "  transform: translate(-50%, -50%); max-width: 70vw; min-width: 260px;",
+    "  display: none; align-items: center; justify-content: center; gap: 16px;",
+    "  padding: 24px 34px;",
+    "  font: 500 20px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
+    "  color: #f4f4f8;",
+    "  background: rgba(58,58,68,0.96);",
     "  -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);",
-    "  border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;",
-    "  box-shadow: 0 6px 30px rgba(0,0,0,0.5);",
+    "  border: 1px solid rgba(255,255,255,0.22); border-radius: 14px;",
+    "  box-shadow: 0 10px 40px rgba(0,0,0,0.6);",
     "  z-index: 3;",
     "}",
     ".vpn.on { display: flex; }",
-    ".vpn.err { border-color: rgba(255,120,110,0.45); color: #ffb3ac; }",
+    ".vpn.err { border-color: rgba(255,120,110,0.6); color: #ffc2bc; }",
     ".vpn .msg { overflow-wrap: anywhere; }",
     ".spin {",
-    "  width: 13px; height: 13px; flex: none; border-radius: 50%;",
-    "  border: 2px solid rgba(255,255,255,0.22); border-top-color: #5b9dff;",
+    "  width: 24px; height: 24px; flex: none; border-radius: 50%;",
+    "  border: 3px solid rgba(255,255,255,0.28); border-top-color: #6aa8ff;",
     "  animation: sp .7s linear infinite;",
     "}",
     ".vpn.err .spin { display: none; }",
@@ -409,6 +409,7 @@
         current = state.current || "";
         renderList();
         setOpen(!!state.open, false);
+        if (state.vpn) window.wvVPN(state.vpn);
         releaseAnimations();
       },
       releaseAnimations
