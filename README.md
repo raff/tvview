@@ -157,6 +157,23 @@ macOS only: it goes through `WKWebView`'s `-setCustomUserAgent:`, and
 `menu_other.go` no-ops it elsewhere. A failure to apply it is a line on stderr,
 not a refusal to start.
 
+### Headphone track buttons
+
+The previous/next track buttons on headphones (and keyboard media keys) seek
+the video that is playing: previous jumps back, next jumps forward. Most
+players ignore these buttons on their own, so a small script registers
+`navigator.mediaSession` handlers in every frame that has a playing video
+(`mediasession.js`) and seeks the `<video>` directly.
+
+```yaml
+media:
+  seek_seconds: 10   # jump per press (default 10)
+  reverse: false     # true if your headset sends previous/next swapped
+```
+
+Another app holding the audio route — a call in Zoom, say — can take these
+buttons away from tvview entirely.
+
 ### Watching from another country
 
 RAI and the BBC serve their good material only to addresses in Italy and the UK.

@@ -64,10 +64,28 @@ type WindowConfig struct {
 	Height int    `yaml:"height" json:"height"`
 }
 
+// defaultSeekSeconds is how far previous/next track jumps when the config does
+// not say.
+const defaultSeekSeconds = 10
+
+// MediaConfig controls what the headphone previous/next track buttons do.
+// See mediasession.js.
+type MediaConfig struct {
+	// SeekSeconds is the jump per press. Zero or negative means
+	// defaultSeekSeconds.
+	SeekSeconds int `yaml:"seek_seconds" json:"seekSeconds"`
+
+	// Reverse makes previous skip forward and next skip back, for headsets
+	// that report the two the wrong way round.
+	Reverse bool `yaml:"reverse" json:"reverse"`
+}
+
 // Config is the whole channels.yaml document.
 type Config struct {
 	Window   WindowConfig `yaml:"window"   json:"window"`
 	Channels []Channel    `yaml:"channels" json:"channels"`
+
+	Media MediaConfig `yaml:"media" json:"media"`
 
 	// VPN is nil when the file has no vpn block, which is what switches the
 	// whole feature off.
@@ -238,6 +256,10 @@ func parseConfig(data []byte, path string) (*Config, error) {
 	}
 	if cfg.Window.Height <= 0 {
 		cfg.Window.Height = 900
+	}
+
+	if cfg.Media.SeekSeconds <= 0 {
+		cfg.Media.SeekSeconds = defaultSeekSeconds
 	}
 
 	cfg.UserAgent = strings.TrimSpace(cfg.UserAgent)

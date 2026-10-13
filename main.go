@@ -17,6 +17,9 @@ import (
 //go:embed sidebar.js
 var sidebarJS string
 
+//go:embed mediasession.js
+var mediaSessionJS string
+
 // app holds the state the sidebar needs to survive a navigation. The injected
 // script is re-run from scratch on every page load, so it asks Go for this.
 type app struct {
@@ -148,13 +151,14 @@ func (a *app) bind() error {
 // inject registers the user scripts: the static channel list first, then the
 // sidebar itself.
 func (a *app) inject() error {
-	boot, err := json.Marshal(map[string]any{"channels": a.cfg.Channels})
+	boot, err := json.Marshal(map[string]any{"channels": a.cfg.Channels, "media": a.cfg.Media})
 	if err != nil {
 		return fmt.Errorf("encoding channels: %w", err)
 	}
 
 	a.w.Init("window.__WV_BOOT = " + string(boot) + ";")
 	a.w.Init(sidebarJS)
+	a.w.Init(mediaSessionJS)
 	return nil
 }
 

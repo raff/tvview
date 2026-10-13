@@ -14,6 +14,14 @@ window:
   width: 1200
   height: 900
 
+# Headphone / keyboard previous- and next-track buttons seek the playing video.
+#   seek_seconds  how far each press jumps (default 10)
+#   reverse       true if your headset reports previous and next the wrong way
+#                 round, so that "next" skips forward
+media:
+  seek_seconds: 10
+  reverse: false
+
 # What the web view tells sites it is. Streaming sites pick which player and
 # which stream to serve based on this, and the web view's own string is not
 # Safari's — which is why some shows would play the ads and then stall.
