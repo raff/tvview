@@ -204,7 +204,17 @@
 
     var foot = document.createElement("div");
     foot.className = "foot";
-    foot.innerHTML = "<kbd>F9</kbd> toggle · <kbd>Esc</kbd> or click the page to close";
+    // Not innerHTML: sites that enforce Trusted Types (YouTube) throw on it,
+    // which would abort build() before the sidebar is ever attached.
+    function key(t) {
+      var k = document.createElement("kbd");
+      k.textContent = t;
+      return k;
+    }
+    foot.appendChild(key("F9"));
+    foot.appendChild(document.createTextNode(" toggle · "));
+    foot.appendChild(key("Esc"));
+    foot.appendChild(document.createTextNode(" or click the page to close"));
 
     vpnBox = document.createElement("div");
     vpnBox.className = "vpn";

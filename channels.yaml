@@ -85,6 +85,9 @@ channels:
   - title: HBO Max
     url: https://hbomax.com
 
+  - title: YouTube
+    url: https://www.youtube.com/
+
   - title: NASA+
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 
