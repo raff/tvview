@@ -37,6 +37,7 @@
   var current = "";
   var settledAt = 0;
   var navigating = false;
+  var navDismissed = false;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
 
   // Go may report a tunnel before build() has run — the eval races the user
@@ -84,6 +85,9 @@
     "  cursor: pointer;",
     "}",
     ".nav button:hover { background: rgba(60,60,72,0.9); }",
+    // Dismiss, between the arrows: narrow and faint until pointed at.
+    ".nav button.x { width: 22px; font-size: 13px; opacity: 0.35; }",
+    ".nav button.x:hover { opacity: 1; }",
 
     ".panel {",
     "  position: fixed; top: 0; left: 0;",
@@ -248,13 +252,19 @@
 
     var nav = document.createElement("div");
     nav.className = "nav";
-    [["‹", "Back (⌘←)", -1], ["›", "Forward (⌘→)", 1]].forEach(function (d) {
+    [["‹", "Back (⌘←)", -1], ["×", "Hide until the pointer leaves and returns", 0], ["›", "Forward (⌘→)", 1]].forEach(function (d) {
       var b = document.createElement("button");
       b.type = "button";
       b.textContent = d[0];
       b.title = d[1];
+      if (d[2] === 0) b.className = "x";
       b.addEventListener("click", function () {
-        history.go(d[2]);
+        if (d[2] === 0) {
+          navDismissed = true;
+          wrap.classList.remove("navnear");
+        } else {
+          history.go(d[2]);
+        }
       });
       nav.appendChild(b);
     });
@@ -365,10 +375,11 @@
         wrap.classList.toggle("near", e.clientX < 90 && e.clientY < 160);
         // Top-centre zone for the back/forward pill; wider than the pill so
         // it is there by the time the pointer reaches it.
-        wrap.classList.toggle(
-          "navnear",
-          e.clientY < 90 && Math.abs(e.clientX - window.innerWidth / 2) < 140
-        );
+        var inZone =
+          e.clientY < 90 && Math.abs(e.clientX - window.innerWidth / 2) < 140;
+        // Leaving the zone re-arms the pill after a dismiss.
+        if (!inZone) navDismissed = false;
+        wrap.classList.toggle("navnear", inZone && !navDismissed);
       },
       true
     );
