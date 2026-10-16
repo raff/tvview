@@ -46,6 +46,8 @@ var (
 	selSetDelegate        = objc.RegisterName("setDelegate:")
 
 	selReload        = objc.RegisterName("reload")
+	selGoBack        = objc.RegisterName("goBack")
+	selGoForward     = objc.RegisterName("goForward")
 	selSubviews      = objc.RegisterName("subviews")
 	selCount         = objc.RegisterName("count")
 	selObjectAtIndex = objc.RegisterName("objectAtIndex:")
@@ -205,6 +207,11 @@ func installMenuBar(a *app) error {
 	viewMenu = newMenu("View")
 	addAction(viewMenu, target, "Reload", "r", 0, a.reload)
 	addSeparator(viewMenu)
+	// Cmd-arrows rather than bare arrows, which players and text fields want.
+	// U+F702/F703 are NSLeftArrowFunctionKey/NSRightArrowFunctionKey.
+	addAction(viewMenu, target, "Back", "\uF702", 0, func() { a.history(-1) })
+	addAction(viewMenu, target, "Forward", "\uF703", 0, func() { a.history(1) })
+	addSeparator(viewMenu)
 	sidebarItem = addAction(viewMenu, target, "Show Sidebar", `\`, 0, a.toggleSidebar)
 	addSeparator(viewMenu)
 	addItem(viewMenu, "Enter Full Screen", "toggleFullScreen:", "f", modControl|modCommand)
@@ -272,6 +279,22 @@ func (a *app) reload() {
 		// player fullscreen the view was invisible to webView() and every
 		// reload took this branch.
 		a.w.Eval("location.reload();")
+	})
+}
+
+// history steps through the page history, natively when the web view can be
+// found so it works even if the page's own JavaScript has wedged.
+func (a *app) history(delta int) {
+	a.w.Dispatch(func() {
+		if view := a.webView(); view != 0 {
+			if delta < 0 {
+				view.Send(selGoBack)
+			} else {
+				view.Send(selGoForward)
+			}
+			return
+		}
+		a.w.Eval(fmt.Sprintf("history.go(%d);", delta))
 	})
 }
 

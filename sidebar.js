@@ -64,6 +64,27 @@
     ".toggle:hover, .wrap.open .toggle, .wrap.near .toggle { opacity: 1; }",
     ".wrap.open .toggle { transform: translateX(" + PANEL_WIDTH + "px); }",
 
+    // Back/forward pill, top centre. Invisible and click-through until the
+    // pointer approaches, so it never sits on the picture.
+    ".nav {",
+    "  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);",
+    "  display: flex; gap: 6px; z-index: 2;",
+    "  opacity: 0; pointer-events: none;",
+    "  transition: opacity .18s ease;",
+    "}",
+    ".wrap.navnear .nav { opacity: 1; pointer-events: auto; }",
+    ".nav button {",
+    "  width: 44px; height: 36px;",
+    "  display: flex; align-items: center; justify-content: center;",
+    "  font: 22px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
+    "  color: #e9e9ee;",
+    "  background: rgba(18,18,22,0.72);",
+    "  border: 1px solid rgba(255,255,255,0.16); border-radius: 9px;",
+    "  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);",
+    "  cursor: pointer;",
+    "}",
+    ".nav button:hover { background: rgba(60,60,72,0.9); }",
+
     ".panel {",
     "  position: fixed; top: 0; left: 0;",
     "  width: " + PANEL_WIDTH + "px; height: 100vh;",
@@ -225,10 +246,24 @@
     vpnBox.appendChild(vpnSpin);
     vpnBox.appendChild(vpnMsg);
 
+    var nav = document.createElement("div");
+    nav.className = "nav";
+    [["‹", "Back (⌘←)", -1], ["›", "Forward (⌘→)", 1]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = d[0];
+      b.title = d[1];
+      b.addEventListener("click", function () {
+        history.go(d[2]);
+      });
+      nav.appendChild(b);
+    });
+
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(foot);
     wrap.appendChild(toggle);
+    wrap.appendChild(nav);
     wrap.appendChild(panel);
     wrap.appendChild(vpnBox);
     root.appendChild(style);
@@ -328,6 +363,12 @@
       "mousemove",
       function (e) {
         wrap.classList.toggle("near", e.clientX < 90 && e.clientY < 160);
+        // Top-centre zone for the back/forward pill; wider than the pill so
+        // it is there by the time the pointer reaches it.
+        wrap.classList.toggle(
+          "navnear",
+          e.clientY < 90 && Math.abs(e.clientX - window.innerWidth / 2) < 140
+        );
       },
       true
     );
