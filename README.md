@@ -77,6 +77,11 @@ channels:
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 ```
 
+A channel can also carry `hide:`, a list of CSS selectors set to
+`display:none` on that channel's site (matched by host, so it holds across
+pages of the site) — e.g. `hide: [header]` removes Amazon's store header above
+Prime Video. Find selectors with `-debug` and the inspector.
+
 Sidebar order follows file order. On startup the app reopens whichever channel
 was last viewed — see *Remembering the last channel* below — falling back to
 the first entry when there is no saved channel, or it no longer matches one in

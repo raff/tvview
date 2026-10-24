@@ -20,6 +20,9 @@ var sidebarJS string
 //go:embed mediasession.js
 var mediaSessionJS string
 
+//go:embed hide.js
+var hideJS string
+
 // app holds the state the sidebar needs to survive a navigation. The injected
 // script is re-run from scratch on every page load, so it asks Go for this.
 type app struct {
@@ -159,6 +162,7 @@ func (a *app) inject() error {
 	a.w.Init("window.__WV_BOOT = " + string(boot) + ";")
 	a.w.Init(sidebarJS)
 	a.w.Init(mediaSessionJS)
+	a.w.Init(hideJS)
 	return nil
 }
 

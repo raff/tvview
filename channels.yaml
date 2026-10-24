@@ -85,6 +85,13 @@ channels:
   - title: HBO Max
     url: https://hbomax.com
 
+  # `hide` lists CSS selectors set to display:none on the channel's site, for
+  # page chrome that gets in the way — here, the store header above the player.
+  - title: Amazon Prime
+    url: https://www.amazon.com/gp/video/storefront
+    hide:
+      - header
+
   - title: YouTube
     url: https://www.youtube.com/
 

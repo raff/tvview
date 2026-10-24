@@ -43,6 +43,10 @@ type Channel struct {
 	// Meaningless without a vpn block, which parseConfig rejects rather
 	// than silently ignores.
 	Region string `yaml:"region" json:"region"`
+
+	// Hide lists CSS selectors to set to display:none on this channel's
+	// site, for page chrome that gets in the way of the player. See hide.js.
+	Hide []string `yaml:"hide" json:"hide"`
 }
 
 // VPNConfig maps each VPN region to the wireguard config file that raises
@@ -275,6 +279,13 @@ func parseConfig(data []byte, path string) (*Config, error) {
 		if c.URL == "" {
 			continue
 		}
+		hide := c.Hide[:0]
+		for _, sel := range c.Hide {
+			if sel = strings.TrimSpace(sel); sel != "" {
+				hide = append(hide, sel)
+			}
+		}
+		c.Hide = hide
 		if c.Title == "" {
 			c.Title = c.URL
 		}
