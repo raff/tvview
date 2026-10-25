@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean
 
 all: build
 
@@ -100,12 +100,26 @@ install-vpn-helper:
 uninstall-vpn-helper:
 	sudo ./scripts/uninstall-vpn-helper.sh
 
+# The config lives in iCloud Drive so every Mac on this Apple ID shares it;
+# the app looks there before ~/.config/tvview.
+CONFIG_DIR := $(HOME)/Library/Mobile Documents/com~apple~CloudDocs/tvview
+
+# Editor for edit-config. Override with e.g. EDITOR="open -t" for TextEdit.
+EDITOR ?= vim
+
+## config: install channels.yaml into the iCloud config folder (creating it
+## and wireguard/ if needed). Overwrites an existing one; see diff-config.
 config:
-	-mkdir -p $(HOME)/.config/tvview/wireguard
-	cp channels.yaml $(HOME)/.config/tvview/channels.yaml
+	mkdir -p "$(CONFIG_DIR)/wireguard"
+	cp channels.yaml "$(CONFIG_DIR)/channels.yaml"
 
 diff-config:
-	diff channels.yaml $(HOME)/.config/tvview/channels.yaml
+	diff channels.yaml "$(CONFIG_DIR)/channels.yaml"
+
+## edit-config: open the iCloud channels.yaml in $(EDITOR).
+edit-config:
+	mkdir -p "$(CONFIG_DIR)/wireguard"
+	$(EDITOR) "$(CONFIG_DIR)/channels.yaml"
 
 clean:
 	rm -rf $(APP) $(BINARY) $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal

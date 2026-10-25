@@ -37,7 +37,7 @@ type app struct {
 }
 
 func main() {
-	configPath := flag.String("config", "", "path to a channels.yaml (default: search ./ then ~/.config/tvview/)")
+	configPath := flag.String("config", "", "path to a channels.yaml (default: search ./, iCloud Drive/tvview, then ~/.config/tvview/)")
 	debug := flag.Bool("debug", false, "enable developer tools")
 	flag.Parse()
 

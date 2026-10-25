@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -146,9 +147,31 @@ func userConfigDir() string {
 	return filepath.Join(dir, "tvview")
 }
 
+// iCloudConfigDir is the tvview folder in iCloud Drive, which a Mac exposes as
+// a plain directory. A config kept there follows the user from machine to
+// machine. It is never created for them: the folder existing is the opt-in.
+// "" off macOS, where there is no iCloud Drive to look in.
+func iCloudConfigDir() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Library", "Mobile Documents", "com~apple~CloudDocs", "tvview")
+}
+
 // configSearchPaths lists the candidate config locations, most specific first.
 func configSearchPaths() []string {
 	paths := []string{"channels.yaml", "channels.yml"}
+
+	if dir := iCloudConfigDir(); dir != "" {
+		paths = append(paths,
+			filepath.Join(dir, "channels.yaml"),
+			filepath.Join(dir, "channels.yml"),
+		)
+	}
 
 	if dir := userConfigDir(); dir != "" {
 		paths = append(paths,

@@ -92,15 +92,19 @@ The config is looked up in this order, first hit wins:
 
 1. `-config <path>`
 2. `./channels.yaml` (or `.yml`)
-3. `$XDG_CONFIG_HOME/tvview/channels.yaml` — defaults to `~/.config/tvview/channels.yaml`
-4. Built-in defaults, embedded in the binary
+3. macOS only: `~/Library/Mobile Documents/com~apple~CloudDocs/tvview/channels.yaml`
+   — the `tvview` folder in iCloud Drive. Create the folder and move your config
+   in, and every Mac signed in to the same Apple ID uses the same file. The app
+   never creates this folder itself. Logins are not shared; they stay per machine.
+4. `$XDG_CONFIG_HOME/tvview/channels.yaml` — defaults to `~/.config/tvview/channels.yaml`
+5. Built-in defaults, embedded in the binary
 
-Because of step 4 the binary runs standalone with no config file present — the
+Because of step 5 the binary runs standalone with no config file present — the
 defaults are compiled in with `go:embed`, so **a macOS bundle needs no resource
 file**; a lone binary is already self-contained.
 
 Embedded defaults are invisible, though, so when the search falls all the way
-through to step 4 the app writes them to `~/.config/tvview/channels.yaml` and
+through to step 5 the app writes them to `~/.config/tvview/channels.yaml` and
 says so on stderr. That leaves a real file to open in an editor. It is only a
 seed, and deliberately narrow:
 
@@ -188,8 +192,8 @@ before the page is fetched:
 ```yaml
 vpn:
   tunnels:
-    IT: ~/.config/tvview/wireguard/IT.conf
-    UK: ~/.config/tvview/wireguard/UK.conf
+    IT: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf
+    UK: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/UK.conf
 
 channels:
   - title: RaiPlay
@@ -324,13 +328,15 @@ connect. There's no free tier to worry about; any paid plan can do this.
 
 ##### Either way
 
-Put the file where `vpn.tunnels` in `channels.yaml` points. `~/.config/tvview/wireguard/`
-is the natural place — created automatically alongside `~/.config/tvview` on
-first run, or by `make config` — named to match the region:
+Put the file where `vpn.tunnels` in `channels.yaml` points. The iCloud Drive
+`tvview/wireguard/` folder is the natural place — created by `make config`, so it
+follows your config to your other Macs — named to match the region. These files
+contain your WireGuard private key, so they are now stored in iCloud Drive;
+that is the price of sharing them:
 
 ```sh
-mv ~/Downloads/tvview-italy.conf ~/.config/tvview/wireguard/IT.conf
-mv ~/Downloads/tvview-uk.conf    ~/.config/tvview/wireguard/UK.conf
+mv ~/Downloads/tvview-italy.conf "$HOME/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf"
+mv ~/Downloads/tvview-uk.conf    "$HOME/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/UK.conf"
 ```
 
 Two things worth knowing before they bite:
@@ -340,9 +346,10 @@ Two things worth knowing before they bite:
   country-wide list, so when a channel that used to work starts geo-blocking
   again, regenerating the config against a different server in the same
   country is the usual fix — not a plumbing problem.
-- **The `.conf` holds a WireGuard private key in plain text.** `~/.config` is
-  your own home directory, not shared, but treat the file the way you would
-  any other credential — don't copy it somewhere world-readable.
+- **The `.conf` holds a WireGuard private key in plain text.** In iCloud
+  Drive it syncs to your other devices and Apple's servers (end-to-end encrypted
+  only with Advanced Data Protection on), so treat the file the way you would
+  any other credential — don't copy it somewhere world-readable or share the folder.
 
 #### What it does and does not guarantee
 

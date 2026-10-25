@@ -6,8 +6,9 @@
 # Config is looked up in this order:
 #   1. -config <path>
 #   2. ./channels.yaml
-#   3. $XDG_CONFIG_HOME/tvview/channels.yaml  (default: ~/.config/tvview/channels.yaml)
-#   4. built-in defaults
+#   3. macOS: iCloud Drive/tvview/channels.yaml  (shared between your Macs)
+#   4. $XDG_CONFIG_HOME/tvview/channels.yaml  (default: ~/.config/tvview/channels.yaml)
+#   5. built-in defaults
 
 window:
   title: TV View
@@ -47,12 +48,12 @@ user_agent: >-
 #
 # vpn:
 #   tunnels:
-#     IT: ~/.config/tvview/wireguard/IT.conf
-#     UK: ~/.config/tvview/wireguard/UK.conf
+#     IT: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf
+#     UK: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/UK.conf
 vpn:
   tunnels:
-    IT: ~/.config/tvview/wireguard/IT.conf
-    UK: ~/.config/tvview/wireguard/UK.conf
+    IT: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf
+    UK: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/UK.conf
 
 channels:
   - title: PBS
@@ -68,7 +69,7 @@ channels:
     url: https://www.peacocktv.com/
 
   # Geo-restricted to Italy. Needs an IT.conf in place under
-  # ~/.config/tvview/wireguard (see the vpn block above) — a region with no
+  # iCloud Drive/tvview/wireguard (see the vpn block above) — a region with no
   # matching vpn.tunnels entry is refused at startup rather than silently
   # ignored, so the two go together.
   - title: RaiPlay
