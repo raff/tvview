@@ -59,7 +59,20 @@ type VPNConfig struct {
 	// Tunnels maps a region name (matched against Channel.Region) to a
 	// wireguard .conf file — the same [Interface]/[Peer] file downloaded
 	// from the VPN provider, unmodified.
+	//
+	// A value starting with pendingPrefix (or empty) means "the file isn't
+	// here yet": see resolvePending.
 	Tunnels map[string]string `yaml:"tunnels" json:"-"`
+
+	// Pending maps regions whose file doesn't exist yet to where it is
+	// expected. Filled in by checkVPN, never read from the file; such a
+	// region is absent from Tunnels, so using it fails with a message that
+	// says where to put the file.
+	Pending map[string]string `yaml:"-" json:"-"`
+
+	// declared is Tunnels exactly as the file spelled it (unexpanded ~,
+	// sentinels), which is what saving writes back.
+	declared map[string]string
 }
 
 // WindowConfig controls the host window.
@@ -348,11 +361,28 @@ func (cfg *Config) checkVPN(path string) error {
 		return fmt.Errorf("%s: vpn needs at least one entry under tunnels", describePath(path))
 	}
 
+	cfg.VPN.declared = make(map[string]string, len(cfg.VPN.Tunnels))
 	resolved := make(map[string]string, len(cfg.VPN.Tunnels))
+	pending := map[string]string{}
 	for region, p := range cfg.VPN.Tunnels {
-		resolved[region] = expandTilde(strings.TrimSpace(p))
+		p = strings.TrimSpace(p)
+		cfg.VPN.declared[region] = p
+		if !isPending(p) {
+			resolved[region] = expandTilde(p)
+			continue
+		}
+		// Not an error, and not looked for anywhere but where a file of
+		// this name would be put: a pending entry becomes usable the
+		// moment the file lands, without a save in between.
+		want := pendingPath(path, region)
+		if want != "" && isFile(want) {
+			resolved[region] = want
+		} else {
+			pending[region] = want
+		}
 	}
 	cfg.VPN.Tunnels = resolved
+	cfg.VPN.Pending = pending
 
 	// A region with no matching tunnel is a config mistake that would
 	// otherwise fail deep inside vpnManager instead of at startup — same
@@ -363,7 +393,9 @@ func (cfg *Config) checkVPN(path string) error {
 			continue
 		}
 		used = true
-		if _, ok := cfg.VPN.Tunnels[c.Region]; !ok {
+		_, have := cfg.VPN.Tunnels[c.Region]
+		_, wait := cfg.VPN.Pending[c.Region]
+		if !have && !wait {
 			return fmt.Errorf("%s: channel %q sets region %q but vpn.tunnels has no entry for it",
 				describePath(path), c.Title, c.Region)
 		}

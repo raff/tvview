@@ -351,6 +351,16 @@ Two things worth knowing before they bite:
   only with Advanced Data Protection on), so treat the file the way you would
   any other credential — don't copy it somewhere world-readable or share the folder.
 
+##### Preparing a region before its file exists
+
+A `tunnels` value of `"### add IT.conf here"` (quoted; unquoted, YAML reads it
+as a comment) means the region is declared but its file is not in place yet.
+The app still starts; selecting a channel in that region says where to put the
+file. As soon as `wireguard/IT.conf` exists next to the config it is used, and
+the next save replaces the placeholder with the real path. Saving also adds an
+entry for every `NAME.conf` found in `wireguard/`, and a placeholder for any
+channel region that has none. It never removes or rewrites a real path.
+
 #### What it does and does not guarantee
 
 The region tvview believes is up is tracked in the process, not probed — a

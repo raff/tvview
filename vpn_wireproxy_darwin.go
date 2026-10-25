@@ -28,6 +28,7 @@ import (
 // state.
 type vpnManager struct {
 	tunnels map[string]string // region -> wireguard .conf path, from VPNConfig.Tunnels
+	pending map[string]string // region -> where its not-yet-present .conf is expected
 
 	mu      sync.Mutex
 	started map[string]*regionTunnelKernel
@@ -48,7 +49,7 @@ func newVPNManager(cfg *VPNConfig) *vpnManager {
 	if cfg == nil {
 		return nil
 	}
-	return &vpnManager{tunnels: cfg.Tunnels, started: map[string]*regionTunnelKernel{}}
+	return &vpnManager{tunnels: cfg.Tunnels, pending: cfg.Pending, started: map[string]*regionTunnelKernel{}}
 }
 
 // Current is the region the WKWebView proxy is pointed at, or "" for none.
@@ -99,6 +100,9 @@ func (m *vpnManager) tunnelFor(region string) (*regionTunnelKernel, error) {
 
 	path, ok := m.tunnels[region]
 	if !ok {
+		if want, wait := m.pending[region]; wait {
+			return nil, fmt.Errorf("no WireGuard file for %s yet: add %s", region, want)
+		}
 		return nil, fmt.Errorf("no wireguard config for region %q", region)
 	}
 
