@@ -15,3 +15,10 @@ wv
 
 # macOS
 .DS_Store
+
+# swift/: the Xcode project is generated from project.yml
+/swift/TVView.xcodeproj/
+/swift/.build/
+/swift/TVCore/.build/
+/swift/TVCore/.swiftpm/
+/swift/build/

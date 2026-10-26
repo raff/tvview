@@ -1,0 +1,92 @@
+# Generate the Xcode project with:  xcodegen generate   (in this directory)
+# The .xcodeproj is not committed; this file is the source of truth.
+name: TVView
+options:
+  bundleIdPrefix: io.github.raff
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Set to your team to run on a device; simulator and Mac builds work without.
+    DEVELOPMENT_TEAM: ""
+packages:
+  TVCore:
+    path: TVCore
+
+# One source of truth for the page scripts and the default config: the files in
+# the repo root, which the Go app embeds too.
+# The page scripts and the default config are the files in the repo root, which
+# the Go app embeds too: one source of truth. (Listed per target; XcodeGen does
+# not flatten a shared list.)
+
+targets:
+  TVView-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - App/Shared
+      - App/macOS
+      - { path: ../sidebar.js, buildPhase: resources }
+      - { path: ../settings.js, buildPhase: resources }
+      - { path: ../hide.js, buildPhase: resources }
+      - { path: ../mediasession.js, buildPhase: resources }
+      - { path: ../channels.yaml, buildPhase: resources }
+    dependencies:
+      - package: TVCore
+    settings:
+      base:
+        PRODUCT_NAME: TV View
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.raff.tvview.swift
+        CODE_SIGN_IDENTITY: "-"
+        # Unsandboxed so the config is found in iCloud Drive/tvview and
+        # ~/.config/tvview like the Go app. A Mac App Store build would need
+        # the sandbox and a different config location (see PORTING.md).
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+    info:
+      path: App/macOS/Info.plist
+      properties:
+        CFBundleName: TV View
+        CFBundleDisplayName: TV View
+        LSMinimumSystemVersion: "14.0"
+        NSHighResolutionCapable: true
+
+  TVView-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - App/Shared
+      - App/iOS
+      - { path: ../sidebar.js, buildPhase: resources }
+      - { path: ../settings.js, buildPhase: resources }
+      - { path: ../hide.js, buildPhase: resources }
+      - { path: ../mediasession.js, buildPhase: resources }
+      - { path: ../channels.yaml, buildPhase: resources }
+    dependencies:
+      - package: TVCore
+    settings:
+      base:
+        PRODUCT_NAME: TV View
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.raff.tvview.swift
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    info:
+      path: App/iOS/Info.plist
+      properties:
+        CFBundleDisplayName: TV View
+        UIBackgroundModes: [audio]
+        # Documents shows up in Files, so channels.yaml can be edited there.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
