@@ -33,6 +33,14 @@ targets:
     sources:
       - App/Shared
       - App/macOS
+      # The privileged helper the VPN library runs (swift/vpn/build.sh builds it).
+      # The library looks for it beside the app's own executable, as the Go app does.
+      - path: build/vpnhelper
+        buildPhase:
+          copyFiles:
+            destination: executables
+            subpath: ""
+        attributes: [CodeSignOnCopy]
       - { path: ../sidebar.js, buildPhase: resources }
       - { path: ../settings.js, buildPhase: resources }
       - { path: ../hide.js, buildPhase: resources }

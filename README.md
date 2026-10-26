@@ -652,7 +652,8 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `fullscreen_darwin.go` | The container that lets the web view survive fullscreen |
 | `menu_other.go` | Deliberate no-ops elsewhere                                 |
 | `vpn_wireproxy_darwin.go` | `vpnManager`: one WireGuard tunnel per region, lazily raised and kept resident |
-| `vpn_kernel_darwin.go` | The kernel-tunnel backend `vpn_wireproxy_darwin.go` calls into: raises the interface via `vpnhelper`, scopes tvview's own sockets to it (`IP_BOUND_IF`), and resolves DNS through it |
+| `vpn_kernel_darwin.go` | The Go app's view of the kernel tunnel: a thin wrapper over `internal/kernelvpn` that `vpn_wireproxy_darwin.go` calls into (and that tests replace with a fake) |
+| `internal/kernelvpn/` | The kernel-tunnel backend itself, shared with the Swift app's library: raises the interface via `vpnhelper`, scopes tvview's own sockets to it (`IP_BOUND_IF`), and resolves DNS through it |
 | `vpn_proxy_darwin.go` | Points `WKWebsiteDataStore`'s `proxyConfigurations` at a tunnel's local SOCKS5 port |
 | `cmd/vpnhelper/main.go` | The one privileged binary: raises and configures a real kernel interface, hands it off, exits |
 | `Makefile`      | Builds `TVView.app`, thin or universal, `vpnhelper` included  |
@@ -715,7 +716,7 @@ field is immediately readable from `sidebar.js` — no plumbing in between.
 [webview/webview](https://github.com/webview/webview), no CGO),
 [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3), and, for VPN regions,
 [wireguard-go](https://git.zx2c4.com/wireguard-go) (the kernel interface and
-device that `vpnhelper` and `vpn_kernel_darwin.go` drive directly),
+device that `vpnhelper` and `internal/kernelvpn` drive directly),
 [windtf/wireproxy](https://github.com/windtf/wireproxy) (WireGuard `.conf`
 parsing), and [things-go/go-socks5](https://github.com/things-go/go-socks5)
 (the local proxy `WKWebView` is pointed at).

@@ -8,7 +8,7 @@ to run tvview on an iPad, and whether a Swift rewrite could serve Mac too.
 - `go-webview` embeds prebuilt libraries for macOS, Linux and Windows only.
   Nothing targets iOS/iPadOS, and Go has no UI layer there.
 - iPadOS apps are sandboxed and cannot spawn helpers, so `cmd/vpnhelper`,
-  `vpn_kernel_darwin.go` (utun + routes) and `scripts/` have no equivalent.
+  `internal/kernelvpn` (utun + routes) and `scripts/` have no equivalent on iOS.
 - `menu_darwin.go`, `quit_darwin.go`, `fullscreen_darwin.go` and
   `useragent_darwin.go` drive AppKit through purego. iPadOS is UIKit, and
   purego's objc bridge is not supported there.

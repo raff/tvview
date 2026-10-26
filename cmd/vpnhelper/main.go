@@ -74,7 +74,7 @@ func run() error {
 // doesn't invent one. `-ifscope` is what keeps this from becoming a normal
 // system-wide default route: a scoped route is consulted only for sockets
 // explicitly bound to this interface (which is exactly what tvview's own
-// dialer does — see bindToInterface in vpn_kernel_darwin.go); it's invisible
+// dialer does — see bindToInterface in internal/kernelvpn); it's invisible
 // to `route get default`, and to every other process and interface on the
 // machine, including a concurrently-connected VPN.
 func configureInterface(name, mtu string, addrs []string) error {

@@ -1,6 +1,9 @@
 #!/bin/sh
-# Builds swift/build/TVVPN.xcframework: the in-process WireGuard library
-# (export/) for macOS (arm64 + x86_64), iPhone/iPad (arm64) and the simulator.
+# Builds swift/build/TVVPN.xcframework: the WireGuard library (export/) for macOS
+# (arm64 + x86_64), iPhone/iPad (arm64) and the simulator, and swift/build/vpnhelper,
+# the privileged helper the macOS slice of the library runs (universal; the Mac app
+# bundles it next to its own executable). On macOS the library raises a real kernel
+# interface through vpnhelper; elsewhere it runs the tunnel in-process.
 #
 # Go's c-archive mode needs cgo, so each slice is compiled with the matching
 # Apple SDK's clang. Needs Xcode and Go; takes a few minutes the first time.
@@ -38,6 +41,12 @@ if build iossim-arm64 ios arm64 arm64 iphonesimulator -target arm64-apple-ios17.
 else
 	echo "note: no arm64 simulator slice; on Apple Silicon run the simulator under Rosetta"
 fi
+
+# vpnhelper: plain Go, no cgo.
+echo "== vpnhelper"
+(cd "$root" && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 $GO build -ldflags '-s -w' -o "$out/vpnhelper-arm64" ./cmd/vpnhelper \
+	&& GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 $GO build -ldflags '-s -w' -o "$out/vpnhelper-amd64" ./cmd/vpnhelper)
+lipo -create "$out/vpnhelper-arm64" "$out/vpnhelper-amd64" -output "$root/swift/build/vpnhelper"
 
 lipo -create "$out/macos-arm64.a" "$out/macos-amd64.a" -output "$out/macos.a"
 lipo -create $sims -output "$out/iossim.a"

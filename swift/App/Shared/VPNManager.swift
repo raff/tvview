@@ -44,7 +44,14 @@ final class VPNManager {
 
     /// How long to wait for a tunnel before saying so. The start itself cannot be
     /// cancelled and carries on; its result is kept for the next try.
+    ///
+    /// On macOS the first start of a region shows the administrator password
+    /// dialog (vpnhelper), which takes as long as the person does.
+    #if os(macOS)
+    private static let startTimeout = 120.0
+    #else
     private static let startTimeout = 20.0
+    #endif
 
     private func tunnel(for region: String, config: Config) async throws -> Int32 {
         if let port = ports[region] { return port }

@@ -4,8 +4,10 @@
 //	void TVVPNStop(int port);
 //
 // Start brings up the tunnel for a WireGuard .conf and returns the local SOCKS5
-// port, or -1 with a message in errBuf. It blocks while the device comes up, so
-// call it off the main thread. Build with swift/vpn/build.sh.
+// port, or -1 with a message in errBuf. It blocks while the device comes up (on
+// macOS, while the administrator password dialog is answered), so call it off
+// the main thread. See backend_macos.go and backend_other.go for what "tunnel"
+// means on each platform. Build with swift/vpn/build.sh.
 package main
 
 /*
@@ -24,13 +26,11 @@ import (
 	"fmt"
 	"sync"
 	"unsafe"
-
-	"tvview/swift/vpn/tunnel"
 )
 
 var (
 	mu      sync.Mutex
-	started = map[int]*tunnel.Tunnel{}
+	started = map[int]closer{}
 )
 
 func fail(buf *C.char, n C.int, msg string) C.int {
@@ -49,14 +49,14 @@ func TVVPNStart(confPath *C.char, errBuf *C.char, errLen C.int) (port C.int) {
 		}
 	}()
 
-	t, err := tunnel.Start(C.GoString(confPath))
+	t, p, err := start(C.GoString(confPath))
 	if err != nil {
 		return fail(errBuf, errLen, err.Error())
 	}
 	mu.Lock()
-	started[t.Port] = t
+	started[p] = t
 	mu.Unlock()
-	return C.int(t.Port)
+	return C.int(p)
 }
 
 //export TVVPNStop

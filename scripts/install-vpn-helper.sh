@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs a NOPASSWD sudoers.d rule scoped to this exact vpnhelper binary,
-# so raiseKernelInterface (vpn_kernel_darwin.go) can elevate it via
+# so raiseKernelInterface (internal/kernelvpn) can elevate it via
 # `sudo -n` without a macOS admin-password prompt on every VPN region
 # switch. Only this one binary, invoked at this one absolute path, is
 # exempted — nothing else on the machine gains passwordless sudo, and
