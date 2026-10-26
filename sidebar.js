@@ -38,13 +38,6 @@
   var current = "";
   var settledAt = 0;
   var navigating = false;
-  var navDismissed = false;
-  // The back/forward pill goes away by itself: it is shown for NAV_SHOW ms
-  // after the pointer last did something that wants it, and never while the
-  // pointer is on it.
-  var NAV_SHOW = 4000;
-  var navTimer = 0;
-  var navHover = false;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
 
   // Go may report a tunnel before build() has run — the eval races the user
@@ -76,32 +69,21 @@
     // Open, it is the panel's close button: inside it, at the top right.
     ".wrap.open .toggle { left: calc(var(--pw) - 46px); }",
 
-    // Back/forward pill, top right (top centre is where a phone's camera
-    // cutout is). Invisible and click-through until the pointer approaches,
-    // so it never sits on the picture. A touch screen has no pointer to
-    // approach, so there it appears when the sidebar opens; either way it
-    // fades again after a few seconds (see armNav).
-    ".nav {",
-    "  position: fixed; top: calc(10px + var(--st, 0px)); right: calc(10px + var(--sr, 0px));",
-    "  display: flex; gap: 6px; z-index: 2;",
-    "  opacity: 0; pointer-events: none;",
-    "  transition: opacity .18s ease;",
-    "}",
-    ".wrap.navnear .nav { opacity: 1; pointer-events: auto; }",
-    ".nav button {",
-    "  width: 44px; height: 36px;",
+    // Back and forward live in the panel header, left of the title: no floating
+    // control to sit on a site's own buttons, and nothing to place differently on
+    // a phone with a camera cutout. (Cmd-Left/Right and the View menu do the same.)
+    ".hnav { display: flex; gap: 4px; margin-right: 10px; flex: none; }",
+    ".hnav button {",
+    "  width: 30px; height: 30px;",
     "  display: flex; align-items: center; justify-content: center;",
-    "  font: 22px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
+    "  font: 20px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee;",
-    "  background: rgba(18,18,22,0.72);",
-    "  border: 1px solid rgba(255,255,255,0.16); border-radius: 9px;",
-    "  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);",
+    "  background: rgba(255,255,255,0.06);",
+    "  border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;",
     "  cursor: pointer;",
     "}",
-    ".nav button:hover { background: rgba(60,60,72,0.9); }",
-    // Dismiss, between the arrows: narrow and faint until pointed at.
-    ".nav button.x { width: 22px; font-size: 13px; opacity: 0.35; }",
-    ".nav button.x:hover { opacity: 1; }",
+    ".hnav button:hover { background: rgba(255,255,255,0.14); }",
+    ".head .title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }",
 
     ".panel {",
     "  position: fixed; top: 0; left: 0;",
@@ -321,7 +303,24 @@
 
     var head = document.createElement("div");
     head.className = "head";
-    head.textContent = "Channels";
+    var hnav = document.createElement("div");
+    hnav.className = "hnav";
+    [["\u2039", "Back (\u2318\u2190)", -1], ["\u203A", "Forward (\u2318\u2192)", 1]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = d[0];
+      b.title = d[1];
+      b.setAttribute("aria-label", d[1]);
+      b.addEventListener("click", function () {
+        history.go(d[2]);
+      });
+      hnav.appendChild(b);
+    });
+    var title = document.createElement("span");
+    title.className = "title";
+    title.textContent = "Channels";
+    head.appendChild(hnav);
+    head.appendChild(title);
 
     list = document.createElement("ul");
     list.className = "list";
@@ -364,42 +363,10 @@
     vpnBox.appendChild(vpnSpin);
     vpnBox.appendChild(vpnMsg);
 
-    var nav = document.createElement("div");
-    nav.className = "nav";
-    [["‹", "Back (⌘←)", -1], ["×", "Hide until the pointer leaves and returns", 0], ["›", "Forward (⌘→)", 1]].forEach(function (d) {
-      var b = document.createElement("button");
-      b.type = "button";
-      b.textContent = d[0];
-      b.title = d[1];
-      if (d[2] === 0) b.className = "x";
-      b.addEventListener("click", function () {
-        if (d[2] === 0) {
-          navDismissed = true;
-          clearTimeout(navTimer);
-          wrap.classList.remove("navnear");
-        } else {
-          armNav(NAV_SHOW);
-          history.go(d[2]);
-        }
-      });
-      nav.appendChild(b);
-    });
-    // On the pill, it stays; off it, a short grace so a touch that just ended
-    // does not make it vanish under the finger.
-    nav.addEventListener("pointerenter", function () {
-      navHover = true;
-      clearTimeout(navTimer);
-    });
-    nav.addEventListener("pointerleave", function () {
-      navHover = false;
-      armNav(NAV_SHOW / 2);
-    });
-
     panel.appendChild(head);
     panel.appendChild(list);
     panel.appendChild(foot);
     wrap.appendChild(toggle);
-    wrap.appendChild(nav);
     wrap.appendChild(panel);
     wrap.appendChild(vpnBox);
     root.appendChild(style);
@@ -447,24 +414,12 @@
     });
   }
 
-  // Shows the pill and (re)starts the clock that hides it.
-  function armNav(ms) {
-    wrap.classList.add("navnear");
-    clearTimeout(navTimer);
-    navTimer = setTimeout(function () {
-      if (!navHover) wrap.classList.remove("navnear");
-    }, ms);
-  }
-
   function setOpen(next, notify) {
     open = !!next;
     wrap.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.textContent = open ? "\u2715" : "\u2630";
     toggle.title = open ? "Close (F9)" : "Channels (F9)";
-    // No hover on a touch screen, so opening the sidebar is what brings the
-    // pill up there.
-    if (open && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) armNav(NAV_SHOW);
     if (notify && window.wvSetOpen) window.wvSetOpen(open);
   }
 
@@ -520,16 +475,8 @@
         var s = vv ? vv.scale : 1;
         var x = (e.clientX - (vv ? vv.offsetLeft : 0)) * s;
         var y = (e.clientY - (vv ? vv.offsetTop : 0)) * s;
-        var width = (vv ? vv.width : window.innerWidth) * s;
         var top = (window.__wvSafe && window.__wvSafe.top) || 0;
         wrap.classList.toggle("near", x < 90 && y < 160 + top);
-        // Top-right zone for the back/forward pill; wider than the pill so
-        // it is there by the time the pointer reaches it.
-        var inZone = y < 90 + top && x > width - 220;
-        // Leaving the zone re-arms the pill after a dismiss.
-        if (!inZone) navDismissed = false;
-        if (inZone && !navDismissed) armNav(NAV_SHOW);
-        else if (!navHover) wrap.classList.remove("navnear");
       },
       true
     );

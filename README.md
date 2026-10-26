@@ -421,13 +421,16 @@ means the next launch starts from the first channel again.
 | Close            | **Esc**, or click anywhere in the page                      |
 | Switch channel   | Click an entry, or **Cmd-1**…**Cmd-9**                      |
 | Next/previous channel | **Cmd-]** / **Cmd-[**                                  |
+| Back / forward   | **‹** **›** at the top of the panel, or **Cmd-←** / **Cmd-→** |
 | Reload page      | **Cmd-R** (reloads in place — you keep what you're watching) |
 | Quit             | **Cmd-Q** twice, or **Quit** in the menu (immediate)        |
 
 The toggle button sits at 22% opacity when idle so it doesn't cover video, and
-brightens when you hover it or move the pointer into that corner. It stays **☰**
-whether open or closed — clicking the page is the primary way out, so a ✕ would
-advertise the lesser of the two.
+brightens when you hover it or move the pointer into that corner. Open, it becomes
+a **✕** at the panel's top right, which closes it; the back and forward arrows sit
+at the panel's top left. They used to float at the top right of the page, which
+landed on sites' own account and search buttons on a desktop and under the camera
+cutout on a phone, so they moved into the panel, where neither is a problem.
 
 ### Why the panel stays open after a channel switch
 
