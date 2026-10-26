@@ -20,7 +20,7 @@ final class WebHost: NSObject {
 
     /// Functions the injected scripts call; each becomes `window.<name>()`
     /// returning a promise, like go-webview's Bind.
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig"]
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -145,6 +145,17 @@ final class WebHost: NSObject {
         case "wvSetOpen":
             if let open = args.first as? Bool { model.setSidebarOpen(open) }
             return (nil, nil)
+        case "wvGetConfig":
+            return (SettingsPanel.view(of: model.cfg, defaultText: AppModel.defaultConfigText), nil)
+        case "wvSaveConfig":
+            guard let request = args.first as? String else { return (nil, "bad request") }
+            let out = SettingsPanel.save(
+                request: request, current: model.cfg, running: model.runningVPN,
+                // install(config:) below re-registers the page scripts, so
+                // hide selectors and media settings apply from the next page.
+                liveScripts: true)
+            if let fresh = out.config { model.apply(fresh) }
+            return (out.response, nil)
         default:
             return (nil, "unknown call \(name)")
         }

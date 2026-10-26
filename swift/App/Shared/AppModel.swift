@@ -15,6 +15,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var startupError: String?
 
     let host: WebHost
+    /// The VPN setup the app started with, to tell whether a save needs a restart.
+    let runningVPN: VPNConfig?
 
     init() {
         var loaded: Config
@@ -26,6 +28,7 @@ final class AppModel: ObservableObject {
             failure = error.localizedDescription
         }
         cfg = loaded
+        runningVPN = loaded.vpn
         startupError = failure
 
         let last = UserDefaults.standard.string(forKey: "lastChannel") ?? ""
@@ -57,6 +60,15 @@ final class AppModel: ObservableObject {
         let list = cfg.channels
         let i = list.firstIndex { $0.url == current } ?? 0
         select(list[(i + delta + list.count) % list.count].url)
+    }
+
+    /// A save went through: take the new config. Page scripts are registered
+    /// again, so hide selectors and media settings reach the next page load; the
+    /// user agent applies from the next load too. The channel list is read live
+    /// by the sidebar and the Channels menu.
+    func apply(_ fresh: Config) {
+        cfg = fresh
+        host.install(config: fresh)
     }
 
     func setSidebarOpen(_ open: Bool) { sidebarOpen = open }

@@ -60,15 +60,22 @@ channel list in the sidebar, switching channels, last channel remembered, user
 agent, per-channel hide selectors, sidebar toggle from the menu (Cmd-\\), the
 Channels menu with Cmd-1…9, Reload / Back / Forward, window title.
 
+Settings panel: `wvGetConfig` / `wvSaveConfig` are implemented in `TVCore`
+(`SettingsPanel`, `ConfigSave`: reconciling `vpn.tunnels`, `.bak`, atomic write)
+and wired into `WebHost`. Saving re-registers the page scripts, so hide selectors
+and media settings reach the next page load without a restart; window size and
+VPN regions still need one. Checked end to end in the Mac app against a scratch
+config (`TVVIEW_HOME=/some/dir` points the app at a different home, so a run can
+not touch your real config).
+
 Not done yet:
 
-- `wvGetConfig` / `wvSaveConfig`, so the Settings button does nothing. Needs the
-  save side of `config.go` ported (reconcile `vpn.tunnels`, `.bak`, atomic
-  write) with the same golden tests, then the two handlers in `WebHost`.
-- Hide selectors and media settings should apply live after a save: re-run
-  `install(config:)`.
 - VPN: regions load and validate, but no tunnel is raised (needs a
   `NEPacketTunnelProvider` extension; see `../PORTING.md`).
+- The settings panel was not driven by hand on the iPad simulator (touch drag
+  in particular), and the sidebar toggle is faint on a touch screen.
 - iCloud config on iOS, the fullscreen/PiP behaviour on a real device, the
   headphone seek behaviour on a real device, an app icon, signing for distribution.
 - Wiring `swift test` and a build of both targets into the Makefile.
+- A golden-file test shared with the Go side (both apps are covered by mirrored
+  tests, not by one fixture yet).

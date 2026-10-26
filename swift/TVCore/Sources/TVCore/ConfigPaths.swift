@@ -2,8 +2,13 @@ import Foundation
 
 /// Where configs live. Mirrors config.go's search order and save target.
 public enum ConfigPaths {
-    /// Home directory. A variable so tests can point it somewhere private.
-    nonisolated(unsafe) public static var home: () -> String = { NSHomeDirectory() }
+    /// Home directory. A variable so tests can point it somewhere private; the
+    /// TVVIEW_HOME environment variable does the same for a launched app (so a
+    /// run can be tried against a scratch config without touching the real one).
+    nonisolated(unsafe) public static var home: () -> String = {
+        if let h = ProcessInfo.processInfo.environment["TVVIEW_HOME"], !h.isEmpty { return h }
+        return NSHomeDirectory()
+    }
 
     public static func expandTilde(_ path: String) -> String {
         guard path.hasPrefix("~/") else { return path }
