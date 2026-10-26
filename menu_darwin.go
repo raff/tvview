@@ -211,6 +211,7 @@ func installMenuBar(a *app) error {
 	// player's.
 	viewMenu = newMenu("View")
 	addAction(viewMenu, target, "Reload", "r", 0, a.reload)
+	addAction(viewMenu, target, "Reset Web View", "r", modOption|modCommand, a.resetWebView)
 	addSeparator(viewMenu)
 	// Cmd-arrows rather than bare arrows, which players and text fields want.
 	// U+F702/F703 are NSLeftArrowFunctionKey/NSRightArrowFunctionKey.
@@ -294,6 +295,14 @@ func refreshChannelsMenu(a *app) {
 // If the view cannot be found the page is asked to reload itself, which is the
 // best that can be done without anything native to message.
 func (a *app) reload() {
+	a.mu.Lock()
+	frozen := a.frozen
+	a.mu.Unlock()
+	if frozen {
+		// A frozen page ignores a reload; replace its process instead.
+		a.resetWebView()
+		return
+	}
 	a.w.Dispatch(func() {
 		if view := a.webView(); view != 0 {
 			view.Send(selReload)

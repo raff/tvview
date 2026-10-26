@@ -7,6 +7,12 @@ package main
 // clipboard keys themselves, and the window manager handles closing.
 func installMenuBar(*app) error { return nil }
 
+// watch and resetWebView are no-ops off macOS: they end WKWebView's web process,
+// which the other platforms' web views do not expose.
+func (*app) watch()               {}
+func (*app) resetWebView()        {}
+func (*app) killWebProcess() bool { return false }
+
 // refreshChannelsMenu is a no-op off macOS, for the same reason.
 func refreshChannelsMenu(*app) {}
 

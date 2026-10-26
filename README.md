@@ -507,6 +507,19 @@ Two consequences of leaning on page fullscreen, both untested:
 - **Esc** exits fullscreen normally, but if the panel was left open the sidebar
   claims that keypress first (`sidebar.js:210`) and only closes the panel.
 
+### A page that freezes
+
+A page whose web process wedges (a player stuck in a loop; seen on RaiPlay) ignores
+everything the app sends it: a channel switch, Cmd-R, the sidebar, even a resize.
+Only ending that process helps, so the app watches for it. `sidebar.js` calls
+`wvPing` every three seconds; when the pings stop for 15 s while the window is on
+screen, the title gains **[page not responding: pick a channel, or Cmd-Opt-R]**.
+From then on, switching channel, Cmd-R, or **View > Reset Web View** (Cmd-Opt-R) first
+ends the web process (`webprocess_darwin.go`, via WebKit's undocumented
+`_webProcessIdentifier`) and then loads into the fresh one WebKit starts. The title
+clears when the page pings again. A window that is minimised or off-screen is never
+flagged. The Swift edition does the same with a native bar and a replaced web view.
+
 ### Quitting, and the menubar
 
 **Cmd-Q twice** quits, the way Chrome does it — the first press puts up a
@@ -648,6 +661,7 @@ click ──▶ window.wvSelect(url) ──▶ Go: store current, Dispatch ─�
 | `channels.yaml` | Default channel list. Embedded *and* the file you edit      |
 | `menu_darwin.go`| The macOS menubar, built with `purego/objc`                 |
 | `quit_darwin.go`| Two-press Cmd-Q and its prompt window                       |
+| `webprocess_darwin.go` | Frozen-page watchdog: ends a wedged web process and reloads |
 | `useragent_darwin.go` | `-setCustomUserAgent:` on the `WKWebView`             |
 | `fullscreen_darwin.go` | The container that lets the web view survive fullscreen |
 | `menu_other.go` | Deliberate no-ops elsewhere                                 |

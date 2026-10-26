@@ -650,6 +650,22 @@
     });
   }
 
+  // Tells the host this page is still running. A page whose script thread is
+  // wedged stops calling, which is how the host knows to end its process
+  // (wvPing exists in the Go app only; the Swift app asks the page itself).
+  function startPing(attempt) {
+    attempt = attempt || 0;
+    // Bindings arrive just after user scripts start; wait for it as applyState does.
+    if (!window.wvPing) {
+      if (attempt < 50) setTimeout(function () { startPing(attempt + 1); }, 20);
+      return;
+    }
+    window.wvPing();
+    setInterval(function () {
+      window.wvPing();
+    }, 3000);
+  }
+
   function start() {
     settledAt = Date.now() + DISMISS_GRACE;
     build();
@@ -658,6 +674,7 @@
     bindDismiss();
     keepAttached();
     applyState(0);
+    startPing();
   }
 
   // User scripts run before <body> exists; documentElement usually does, but

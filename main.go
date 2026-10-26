@@ -34,6 +34,11 @@ type app struct {
 	open    bool
 	current string
 	vpnSt   map[string]string // last showVPN state, replayed to pages that load mid-negotiation
+
+	// lastPing is when the page last called wvPing; frozen is set when it has not
+	// for frozenAfter (webprocess_darwin.go).
+	lastPing time.Time
+	frozen   bool
 }
 
 func main() {
@@ -74,7 +79,7 @@ func main() {
 		}
 	}
 
-	a := &app{w: w, cfg: cfg, vpn: newVPNManager(cfg.VPN), current: start}
+	a := &app{w: w, cfg: cfg, vpn: newVPNManager(cfg.VPN), current: start, lastPing: time.Now()}
 
 	if err := a.bind(); err != nil {
 		log.Fatal("tvview: ", err)
@@ -119,6 +124,7 @@ func main() {
 		w.Navigate(start)
 	}
 
+	go a.watch()
 	w.Run()
 }
 
@@ -138,6 +144,7 @@ func (a *app) bind() error {
 		{"wvGetConfig", a.configView},
 		{"wvSaveConfig", a.saveFromPanel},
 		{"wvSelect", func(url string) { a.selectChannel(url) }},
+		{"wvPing", func() { a.pinged() }},
 		{"wvSetOpen", func(open bool) {
 			a.mu.Lock()
 			a.open = open
@@ -251,11 +258,36 @@ func (a *app) enterChannel(url string) {
 func (a *app) navigate(url string) {
 	a.mu.Lock()
 	a.vpnSt = nil
+	frozen := a.frozen
+	a.frozen = false
+	a.lastPing = time.Now() // the new page has frozenAfter to say it is there
 	a.mu.Unlock()
 	a.w.Dispatch(func() {
 		a.w.SetTitle(a.windowTitle(url))
+		if frozen {
+			// Nothing loads into a frozen page: end its process first, and load
+			// into the new one WebKit starts.
+			a.killWebProcess()
+			time.AfterFunc(500*time.Millisecond, func() {
+				a.w.Dispatch(func() { a.w.Navigate(url) })
+			})
+			return
+		}
 		a.w.Navigate(url)
 	})
+}
+
+// pinged is the page saying it is alive.
+func (a *app) pinged() {
+	a.mu.Lock()
+	a.lastPing = time.Now()
+	was := a.frozen
+	a.frozen = false
+	cur := a.current
+	a.mu.Unlock()
+	if was {
+		a.w.Dispatch(func() { a.w.SetTitle(a.windowTitle(cur)) })
+	}
 }
 
 // regionFor is the VPN region a channel asked for, or "" for none.
@@ -299,6 +331,7 @@ func (a *app) windowTitle(url string) string {
 	a.mu.Lock()
 	title := a.cfg.Window.Title
 	channels := a.cfg.Channels
+	frozen := a.frozen
 	a.mu.Unlock()
 	for _, c := range channels {
 		if c.URL == url {
@@ -310,6 +343,9 @@ func (a *app) windowTitle(url string) string {
 		if region := a.vpn.Current(); region != "" {
 			title += "  [VPN " + region + "]"
 		}
+	}
+	if frozen {
+		title += "  [page not responding: pick a channel, or Cmd-Opt-R]"
 	}
 	return title
 }
