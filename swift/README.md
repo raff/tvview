@@ -253,9 +253,8 @@ tries `sudo -n` first and only falls back to the administrator dialog, so after 
 region starts with no prompt. Read the script's header for the trade: the rule trusts
 whatever file is at that path, and an app in `/Applications` is normally yours, so
 anything running as you could swap the helper and run it as root. Undo with
-`scripts/uninstall-vpn-helper.sh`. The rule was generated and validated here but **not
-installed or exercised** (it needs your password); the first region start after installing
-it is the test.
+`scripts/uninstall-vpn-helper.sh`. Installed with `make install-vpn-helper` and confirmed
+working on the author's Mac.
 
 ## Status
 
