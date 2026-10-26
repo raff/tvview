@@ -39,6 +39,12 @@
   var settledAt = 0;
   var navigating = false;
   var navDismissed = false;
+  // The back/forward pill goes away by itself: it is shown for NAV_SHOW ms
+  // after the pointer last did something that wants it, and never while the
+  // pointer is on it.
+  var NAV_SHOW = 4000;
+  var navTimer = 0;
+  var navHover = false;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
 
   // Go may report a tunnel before build() has run — the eval races the user
@@ -73,7 +79,8 @@
     // Back/forward pill, top right (top centre is where a phone's camera
     // cutout is). Invisible and click-through until the pointer approaches,
     // so it never sits on the picture. A touch screen has no pointer to
-    // approach, so there it shows whenever the sidebar is open.
+    // approach, so there it appears when the sidebar opens; either way it
+    // fades again after a few seconds (see armNav).
     ".nav {",
     "  position: fixed; top: calc(10px + var(--st, 0px)); right: calc(10px + var(--sr, 0px));",
     "  display: flex; gap: 6px; z-index: 2;",
@@ -81,7 +88,6 @@
     "  transition: opacity .18s ease;",
     "}",
     ".wrap.navnear .nav { opacity: 1; pointer-events: auto; }",
-    "@media (pointer: coarse) { .wrap.open .nav { opacity: 1; pointer-events: auto; } }",
     ".nav button {",
     "  width: 44px; height: 36px;",
     "  display: flex; align-items: center; justify-content: center;",
@@ -343,12 +349,24 @@
       b.addEventListener("click", function () {
         if (d[2] === 0) {
           navDismissed = true;
+          clearTimeout(navTimer);
           wrap.classList.remove("navnear");
         } else {
+          armNav(NAV_SHOW);
           history.go(d[2]);
         }
       });
       nav.appendChild(b);
+    });
+    // On the pill, it stays; off it, a short grace so a touch that just ended
+    // does not make it vanish under the finger.
+    nav.addEventListener("pointerenter", function () {
+      navHover = true;
+      clearTimeout(navTimer);
+    });
+    nav.addEventListener("pointerleave", function () {
+      navHover = false;
+      armNav(NAV_SHOW / 2);
     });
 
     panel.appendChild(head);
@@ -403,12 +421,24 @@
     });
   }
 
+  // Shows the pill and (re)starts the clock that hides it.
+  function armNav(ms) {
+    wrap.classList.add("navnear");
+    clearTimeout(navTimer);
+    navTimer = setTimeout(function () {
+      if (!navHover) wrap.classList.remove("navnear");
+    }, ms);
+  }
+
   function setOpen(next, notify) {
     open = !!next;
     wrap.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.textContent = open ? "\u2715" : "\u2630";
     toggle.title = open ? "Close (F9)" : "Channels (F9)";
+    // No hover on a touch screen, so opening the sidebar is what brings the
+    // pill up there.
+    if (open && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) armNav(NAV_SHOW);
     if (notify && window.wvSetOpen) window.wvSetOpen(open);
   }
 
@@ -472,7 +502,8 @@
         var inZone = y < 90 + top && x > width - 220;
         // Leaving the zone re-arms the pill after a dismiss.
         if (!inZone) navDismissed = false;
-        wrap.classList.toggle("navnear", inZone && !navDismissed);
+        if (inZone && !navDismissed) armNav(NAV_SHOW);
+        else if (!navHover) wrap.classList.remove("navnear");
       },
       true
     );
