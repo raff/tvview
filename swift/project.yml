@@ -12,8 +12,10 @@ settings:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    # Set to your team to run on a device; simulator and Mac builds work without.
-    DEVELOPMENT_TEAM: ""
+    # Needed to run on a device or to sign for distribution; the simulator and
+    # the ad-hoc signed Mac build do not use it. A team ID is not a secret (it is
+    # in every app you sign).
+    DEVELOPMENT_TEAM: EDG4R37566
 packages:
   TVCore:
     path: TVCore
