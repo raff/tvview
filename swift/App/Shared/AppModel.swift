@@ -18,7 +18,7 @@ final class AppModel: ObservableObject {
     let vpn = VPNManager()
     /// Last status shown by the page's VPN overlay, replayed to pages that load
     /// while a tunnel is still coming up (see wvState).
-    private(set) var vpnSt: [String: String]?
+    @Published private(set) var vpnSt: [String: String]?
     /// The VPN setup the app started with, to tell whether a save needs a restart.
     let runningVPN: VPNConfig?
 
@@ -133,6 +133,12 @@ final class AppModel: ObservableObject {
         guard stallHint else { return }
         stallHint = false
         showVPN("done", "")
+    }
+
+    /// Takes the status message down, for the native bar's Dismiss button.
+    func dismissStatus() {
+        showVPN("done", "")
+        vpnSt = nil
     }
 
     /// A page failed to load: show why in the status overlay instead of leaving a

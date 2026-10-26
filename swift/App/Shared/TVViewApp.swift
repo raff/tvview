@@ -63,6 +63,11 @@ struct ContentView: View {
                 #if os(iOS)
                 if model.usingBuiltIn && !model.folderPromptDismissed { folderPrompt }
                 #endif
+                // A way out that does not depend on the page: when the status overlay
+                // is showing an error (a tunnel that would not start, a page that
+                // never finishes), the page may be too broken to open its own
+                // sidebar, and this app restores the last channel on every launch.
+                if model.vpnSt?["state"] == "error" { escapeBar }
                 if let err = model.startupError {
                     Text("Using built-in channels: \(err)")
                         .font(.footnote)
@@ -74,6 +79,25 @@ struct ContentView: View {
             .padding()
         }
         .ignoresSafeArea()
+    }
+}
+
+extension ContentView {
+    var escapeBar: some View {
+        HStack(spacing: 12) {
+            Menu {
+                ForEach(Array(model.cfg.channels.enumerated()), id: \.offset) { _, ch in
+                    Button(ch.title) { model.select(ch.url) }
+                }
+            } label: {
+                Label("Switch channel", systemImage: "list.bullet")
+            }
+            .buttonStyle(.borderedProminent)
+            Button("Dismiss") { model.dismissStatus() }
+                .buttonStyle(.bordered)
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
