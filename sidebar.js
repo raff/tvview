@@ -50,7 +50,7 @@
     "* { box-sizing: border-box; margin: 0; padding: 0; }",
 
     ".toggle {",
-    "  position: fixed; top: 10px; left: 10px;",
+    "  position: fixed; top: calc(10px + var(--st, 0px)); left: calc(10px + var(--sl, 0px));",
     "  width: 36px; height: 36px;",
     "  display: flex; align-items: center; justify-content: center;",
     "  font: 15px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
@@ -66,15 +66,18 @@
     ".toggle:hover, .wrap.open .toggle, .wrap.near .toggle { opacity: 1; }",
     ".wrap.open .toggle { transform: translateX(" + PANEL_WIDTH + "px); }",
 
-    // Back/forward pill, top centre. Invisible and click-through until the
-    // pointer approaches, so it never sits on the picture.
+    // Back/forward pill, top right (top centre is where a phone's camera
+    // cutout is). Invisible and click-through until the pointer approaches,
+    // so it never sits on the picture. A touch screen has no pointer to
+    // approach, so there it shows whenever the sidebar is open.
     ".nav {",
-    "  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);",
+    "  position: fixed; top: calc(10px + var(--st, 0px)); right: calc(10px + var(--sr, 0px));",
     "  display: flex; gap: 6px; z-index: 2;",
     "  opacity: 0; pointer-events: none;",
     "  transition: opacity .18s ease;",
     "}",
     ".wrap.navnear .nav { opacity: 1; pointer-events: auto; }",
+    "@media (pointer: coarse) { .wrap.open .nav { opacity: 1; pointer-events: auto; } }",
     ".nav button {",
     "  width: 44px; height: 36px;",
     "  display: flex; align-items: center; justify-content: center;",
@@ -94,6 +97,7 @@
     "  position: fixed; top: 0; left: 0;",
     "  width: " + PANEL_WIDTH + "px; height: 100%;",
     "  display: flex; flex-direction: column;",
+    "  padding: var(--st, 0px) 0 var(--sb, 0px) var(--sl, 0px);",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee;",
     "  background: rgba(16,16,20,0.94);",
@@ -224,6 +228,28 @@
     fit();
   };
 
+  // Screen areas the page is drawn under but must not put controls in: the
+  // camera cutout, rounded corners, the home indicator. The page itself cannot
+  // see them (env(safe-area-inset-*) is 0 in a web view that extends under
+  // them), so the app reports them: {top, left, bottom, right} in screen
+  // points. They become --st/--sl/--sb/--sr on each of our hosts, and the CSS
+  // keeps controls inside. Called again when the device turns, and after each
+  // page commits; kept in window.__wvSafe for hosts built later.
+  function applySafe(h) {
+    var i = window.__wvSafe || {};
+    [["--st", "top"], ["--sl", "left"], ["--sb", "bottom"], ["--sr", "right"]].forEach(function (p) {
+      h.style.setProperty(p[0], (i[p[1]] || 0) + "px");
+    });
+  }
+  window.__wvApplySafe = applySafe;
+  window.wvSafeArea = function (insets) {
+    window.__wvSafe = insets || {};
+    ["__wv_sidebar", "__wv_settings"].forEach(function (id) {
+      var h = document.getElementById(id);
+      if (h) applySafe(h);
+    });
+  };
+
   function build() {
     host = document.createElement("div");
     host.id = "__wv_sidebar";
@@ -333,6 +359,7 @@
     renderList();
     document.documentElement.appendChild(host);
     window.__wvFitViewport(host);
+    applySafe(host);
 
     // A status that arrived while the DOM was still being assembled.
     if (vpnPending) {
@@ -424,11 +451,18 @@
     window.addEventListener(
       "mousemove",
       function (e) {
-        wrap.classList.toggle("near", e.clientX < 90 && e.clientY < 160);
-        // Top-centre zone for the back/forward pill; wider than the pill so
+        // In screen pixels, whatever the page's zoom: clientX/Y are in layout
+        // units, which a zoomed-out page makes several times too large.
+        var vv = window.visualViewport;
+        var s = vv ? vv.scale : 1;
+        var x = (e.clientX - (vv ? vv.offsetLeft : 0)) * s;
+        var y = (e.clientY - (vv ? vv.offsetTop : 0)) * s;
+        var width = (vv ? vv.width : window.innerWidth) * s;
+        var top = (window.__wvSafe && window.__wvSafe.top) || 0;
+        wrap.classList.toggle("near", x < 90 && y < 160 + top);
+        // Top-right zone for the back/forward pill; wider than the pill so
         // it is there by the time the pointer reaches it.
-        var inZone =
-          e.clientY < 90 && Math.abs(e.clientX - window.innerWidth / 2) < 140;
+        var inZone = y < 90 + top && x > width - 220;
         // Leaving the zone re-arms the pill after a dismiss.
         if (!inZone) navDismissed = false;
         wrap.classList.toggle("navnear", inZone && !navDismissed);

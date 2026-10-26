@@ -27,6 +27,32 @@ struct ContentView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
+        GeometryReader { geo in
+            content
+            #if os(iOS)
+                .onAppear { push(geo.safeAreaInsets) }
+                .onChange(of: geo.safeAreaInsets) { _, v in push(v) }
+            #endif
+        }
+        #if os(macOS)
+        .navigationTitle(model.windowTitle)
+        #else
+        .statusBarHidden()
+        .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) {
+            model.configFolderChosen($0)
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    /// The page extends under the camera cutout and corners, so tell it where
+    /// they are and let the sidebar keep its controls out of them.
+    private func push(_ i: EdgeInsets) {
+        model.host.setSafeArea(top: i.top, left: i.leading, bottom: i.bottom, right: i.trailing)
+    }
+    #endif
+
+    private var content: some View {
         ZStack(alignment: .bottom) {
             Color.black
             WebViewContainer(webView: model.host.webView)
@@ -45,16 +71,6 @@ struct ContentView: View {
             .padding()
         }
         .ignoresSafeArea()
-        #if os(iOS)
-        .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) {
-            model.configFolderChosen($0)
-        }
-        #endif
-        #if os(macOS)
-        .navigationTitle(model.windowTitle)
-        #else
-        .statusBarHidden()
-        #endif
     }
 }
 

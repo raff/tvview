@@ -30,7 +30,8 @@
     "* { box-sizing: border-box; }",
     ".scrim {",
     "  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;",
-    "  padding: 16px; background: rgba(0,0,0,0.55);",
+    "  padding: calc(16px + var(--st, 0px)) calc(16px + var(--sr, 0px)) calc(16px + var(--sb, 0px)) calc(16px + var(--sl, 0px));",
+    "  background: rgba(0,0,0,0.55);",
     "  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee;",
@@ -80,7 +81,7 @@
     "}",
     ".spacer { flex: none; width: 18px; }",
     ".toast {",
-    "  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);",
+    "  position: fixed; left: 50%; bottom: calc(24px + var(--sb, 0px)); transform: translateX(-50%);",
     "  max-width: min(560px, calc(100% - 32px)); padding: 10px 16px;",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee; background: rgba(40,40,50,0.97);",
@@ -697,6 +698,7 @@
     root.appendChild(scrim);
     document.documentElement.appendChild(host);
     if (window.__wvFitViewport) window.__wvFitViewport(host);
+    if (window.__wvApplySafe) window.__wvApplySafe(host);
 
     keyHandler = function (e) {
       if (e.key === "Escape") {

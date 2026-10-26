@@ -98,6 +98,23 @@ final class WebHost: NSObject {
         return text
     }
 
+    // MARK: safe area
+
+    private var safe: [String: Double] = [:]
+
+    /// The insets of the screen the page is drawn under (camera cutout, corners,
+    /// home indicator), which the page cannot see for itself. Remembered, and
+    /// sent again after each page commits.
+    func setSafeArea(top: Double, left: Double, bottom: Double, right: Double) {
+        safe = ["top": top, "left": left, "bottom": bottom, "right": right]
+        sendSafeArea()
+    }
+
+    fileprivate func sendSafeArea() {
+        guard !safe.isEmpty else { return }
+        run("window.wvSafeArea && window.wvSafeArea(\(Self.json(safe)));")
+    }
+
     // MARK: driving the page
 
     func load(_ urlString: String) {
@@ -182,6 +199,10 @@ private final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
 }
 
 extension WebHost: WKNavigationDelegate, WKUIDelegate {
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        sendSafeArea()
+    }
+
     /// target=_blank and window.open would otherwise do nothing in a view with
     /// no tabs; show them in place.
     func webView(
