@@ -10,6 +10,7 @@
 //   window.wvState()  -> {open, current}               live, survives navigation
 //   window.wvSelect(url)
 //   window.wvSetOpen(open)
+//   window.wvOpenSettings()   defined by settings.js; the footer button calls it
 //
 // Provided to Go:
 //   window.wvToggleSidebar()  driven by the macOS View menu, which reaches us
@@ -144,6 +145,13 @@
     "  border-top: 1px solid rgba(255,255,255,0.08);",
     "  font-size: 11px; color: rgba(233,233,238,0.35);",
     "}",
+    ".foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }",
+    ".foot .gear {",
+    "  flex: none; font: inherit; color: rgba(233,233,238,0.6);",
+    "  background: none; border: 1px solid rgba(255,255,255,0.14); border-radius: 6px;",
+    "  padding: 3px 8px; cursor: pointer;",
+    "}",
+    ".foot .gear:hover { color: #e9e9ee; background: rgba(255,255,255,0.08); }",
     ".foot kbd {",
     "  font: inherit; padding: 1px 5px;",
     "  background: rgba(255,255,255,0.1); border-radius: 4px;",
@@ -236,10 +244,25 @@
       k.textContent = t;
       return k;
     }
-    foot.appendChild(key("F9"));
-    foot.appendChild(document.createTextNode(" toggle · "));
-    foot.appendChild(key("Esc"));
-    foot.appendChild(document.createTextNode(" or click the page to close"));
+    var hint = document.createElement("span");
+    hint.appendChild(key("F9"));
+    hint.appendChild(document.createTextNode(" toggle · "));
+    hint.appendChild(key("Esc"));
+    hint.appendChild(document.createTextNode(" or click the page to close"));
+    foot.appendChild(hint);
+
+    var gear = document.createElement("button");
+    gear.className = "gear";
+    gear.type = "button";
+    gear.title = "Edit channels and settings (\u2318,)";
+    gear.textContent = "\u2699 Settings";
+    gear.addEventListener("click", function () {
+      if (!window.wvOpenSettings) return;
+      // Out of the way: the dialog is modal and Esc should close one thing.
+      setOpen(false, true);
+      window.wvOpenSettings();
+    });
+    foot.appendChild(gear);
 
     vpnBox = document.createElement("div");
     vpnBox.className = "vpn";
@@ -468,6 +491,9 @@
     Promise.resolve(window.wvState()).then(
       function (state) {
         state = state || {};
+        // Live, so a list edited since startup (settings panel) wins over
+        // the copy baked into the page at injection.
+        if (state.channels) channels = state.channels;
         current = state.current || "";
         renderList();
         setOpen(!!state.open, false);
@@ -477,6 +503,17 @@
       releaseAnimations
     );
   }
+
+  // The settings panel saved: take the new list without a page load.
+  window.wvConfigChanged = function () {
+    if (!window.wvState) return;
+    Promise.resolve(window.wvState()).then(function (state) {
+      if (state && state.channels) {
+        channels = state.channels;
+        renderList();
+      }
+    });
+  };
 
   function releaseAnimations() {
     requestAnimationFrame(function () {

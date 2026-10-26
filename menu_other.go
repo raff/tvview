@@ -7,6 +7,9 @@ package main
 // clipboard keys themselves, and the window manager handles closing.
 func installMenuBar(*app) error { return nil }
 
+// refreshChannelsMenu is a no-op off macOS, for the same reason.
+func refreshChannelsMenu(*app) {}
+
 // setUserAgent is a no-op off macOS. WebView2 and WebKitGTK both have a knob
 // for this, but go-webview does not expose the underlying widget on those
 // platforms the way NSWindow's view tree lets us find the WKWebView.

@@ -45,14 +45,15 @@ var (
 	selSetState           = objc.RegisterName("setState:")
 	selSetDelegate        = objc.RegisterName("setDelegate:")
 
-	selReload        = objc.RegisterName("reload")
-	selGoBack        = objc.RegisterName("goBack")
-	selGoForward     = objc.RegisterName("goForward")
-	selSubviews      = objc.RegisterName("subviews")
-	selCount         = objc.RegisterName("count")
-	selObjectAtIndex = objc.RegisterName("objectAtIndex:")
-	selIsKindOfClass = objc.RegisterName("isKindOfClass:")
-	selWindows       = objc.RegisterName("windows")
+	selReload         = objc.RegisterName("reload")
+	selRemoveAllItems = objc.RegisterName("removeAllItems")
+	selGoBack         = objc.RegisterName("goBack")
+	selGoForward      = objc.RegisterName("goForward")
+	selSubviews       = objc.RegisterName("subviews")
+	selCount          = objc.RegisterName("count")
+	selObjectAtIndex  = objc.RegisterName("objectAtIndex:")
+	selIsKindOfClass  = objc.RegisterName("isKindOfClass:")
+	selWindows        = objc.RegisterName("windows")
 
 	// Implemented by our own target class, below.
 	selMenuAction      = objc.RegisterName("tvviewMenuAction:")
@@ -79,7 +80,9 @@ var (
 	sidebarItem  objc.ID
 	viewMenu     objc.ID
 	channelsMenu objc.ID
-	channelItems []objc.ID // parallel to menuApp.cfg.Channels
+	channelItems []objc.ID // parallel to channelURLs
+	channelURLs  []string  // what the items were built from; a save can change the live list under them
+	menuTarget   objc.ID
 )
 
 // menuAction is the IMP behind every item we implement ourselves. Items are
@@ -119,7 +122,7 @@ func menuNeedsUpdate(_ objc.ID, _ objc.SEL, menu objc.ID) {
 	case channelsMenu:
 		for i, item := range channelItems {
 			state := stateOff
-			if menuApp.cfg.Channels[i].URL == current {
+			if channelURLs[i] == current {
 				state = stateOn
 			}
 			item.Send(selSetState, state)
@@ -184,6 +187,8 @@ func installMenuBar(a *app) error {
 	addItem(appMenu, "Show All", "unhideAllApplications:", "", 0)
 	addSeparator(appMenu)
 	// Not terminate:. See requestQuit — the menu quits at once, Cmd-Q asks.
+	addAction(appMenu, target, "Settings…", ",", 0, a.openSettings)
+	addSeparator(appMenu)
 	addAction(appMenu, target, "Quit "+appName, "q", 0, a.requestQuit)
 	addSubmenu(main, appName, appMenu)
 
@@ -219,22 +224,9 @@ func installMenuBar(a *app) error {
 	addSubmenu(main, "View", viewMenu)
 
 	// Channels. Cmd-1..Cmd-9 for the first nine; the rest are click-only.
+	menuTarget = target
 	channelsMenu = newMenu("Channels")
-	addAction(channelsMenu, target, "Channel Up", "]", 0, func() { a.stepChannel(1) })
-	addAction(channelsMenu, target, "Channel Down", "[", 0, func() { a.stepChannel(-1) })
-	addSeparator(channelsMenu)
-	channelItems = make([]objc.ID, 0, len(a.cfg.Channels))
-	for i, c := range a.cfg.Channels {
-		key := ""
-		if i < 9 {
-			key = string(rune('1' + i))
-		}
-		url := c.URL // not the loop variable, for the closure
-		item := addAction(channelsMenu, target, c.Title, key, 0, func() {
-			a.selectChannel(url)
-		})
-		channelItems = append(channelItems, item)
-	}
+	fillChannelsMenu(a)
 	channelsMenu.Send(selSetDelegate, target)
 	addSubmenu(main, "Channels", channelsMenu)
 
@@ -248,6 +240,41 @@ func installMenuBar(a *app) error {
 	app.Send(selSetMainMenu, main)
 	app.Send(selSetWindowsMenu, windowMenu)
 	return nil
+}
+
+// fillChannelsMenu adds the channel items to channelsMenu, which must be empty.
+func fillChannelsMenu(a *app) {
+	addAction(channelsMenu, menuTarget, "Channel Up", "]", 0, func() { a.stepChannel(1) })
+	addAction(channelsMenu, menuTarget, "Channel Down", "[", 0, func() { a.stepChannel(-1) })
+	addSeparator(channelsMenu)
+
+	channels := a.channelList()
+	channelItems = make([]objc.ID, 0, len(channels))
+	channelURLs = channelURLs[:0]
+	for i, c := range channels {
+		key := ""
+		if i < 9 {
+			key = string(rune('1' + i))
+		}
+		url := c.URL // not the loop variable, for the closure
+		item := addAction(channelsMenu, menuTarget, c.Title, key, 0, func() {
+			a.selectChannel(url)
+		})
+		channelItems = append(channelItems, item)
+		channelURLs = append(channelURLs, url)
+	}
+}
+
+// refreshChannelsMenu rebuilds the Channels menu after the list was edited.
+// Main thread only. The old items are dropped from the menu but, like every
+// menu object here, never released; menuActions only grows by one closure per
+// item per save.
+func refreshChannelsMenu(a *app) {
+	if channelsMenu == 0 {
+		return
+	}
+	channelsMenu.Send(selRemoveAllItems)
+	fillChannelsMenu(a)
 }
 
 // reload reloads whatever page is on screen, in place.

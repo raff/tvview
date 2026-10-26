@@ -133,8 +133,10 @@ func (a *app) bind() error {
 		{"wvState", func() map[string]any {
 			a.mu.Lock()
 			defer a.mu.Unlock()
-			return map[string]any{"open": a.open, "current": a.current, "vpn": a.vpnSt}
+			return map[string]any{"open": a.open, "current": a.current, "vpn": a.vpnSt, "channels": a.cfg.Channels}
 		}},
+		{"wvGetConfig", a.configView},
+		{"wvSaveConfig", a.saveFromPanel},
 		{"wvSelect", func(url string) { a.selectChannel(url) }},
 		{"wvSetOpen", func(open bool) {
 			a.mu.Lock()
@@ -163,14 +165,15 @@ func (a *app) inject() error {
 	a.w.Init(sidebarJS)
 	a.w.Init(mediaSessionJS)
 	a.w.Init(hideJS)
+	a.w.Init(settingsJS)
 	return nil
 }
 
 // stepChannel moves to the next (delta 1) or previous (delta -1) channel,
 // wrapping around the ends of the list.
 func (a *app) stepChannel(delta int) {
-	channels := a.cfg.Channels
 	a.mu.Lock()
+	channels := a.cfg.Channels
 	i := 0
 	for j, c := range channels {
 		if c.URL == a.current {
@@ -257,7 +260,7 @@ func (a *app) navigate(url string) {
 
 // regionFor is the VPN region a channel asked for, or "" for none.
 func (a *app) regionFor(url string) string {
-	for _, c := range a.cfg.Channels {
+	for _, c := range a.channelList() {
 		if c.URL == url {
 			return c.Region
 		}
@@ -293,8 +296,11 @@ func (a *app) toggleSidebar() {
 }
 
 func (a *app) windowTitle(url string) string {
+	a.mu.Lock()
 	title := a.cfg.Window.Title
-	for _, c := range a.cfg.Channels {
+	channels := a.cfg.Channels
+	a.mu.Unlock()
+	for _, c := range channels {
 		if c.URL == url {
 			title += " — " + c.Title
 			break

@@ -1,7 +1,8 @@
 # Settings panel
 
-Status: **step 1 of 4 done** (saving the config, in Go). The panel, the bridge
-and the Swift side are not started. Written so work can resume from here; see
+Status: **steps 1-3 done in the Go app** (saving, the bridge, `settings.js`, gear
+button, Cmd-,). Not yet tried in the real app window; the panel itself was
+exercised in a browser with a mocked bridge. The Swift side is not started. Written so work can resume from here; see
 also `PORTING.md` for the Swift/iPad plan this has to fit.
 
 Goal: add, remove, edit and reorder channels, and edit the global settings, from
@@ -102,15 +103,42 @@ Tests: `config_save_test.go`.
 - **Concurrent edits** on two Macs are last-write-wins; iCloud will surface a
   conflict file. Accepted.
 
+## What was built (steps 2-3)
+
+- `settings.go`: `configView()` (`wvGetConfig`), `saveFromPanel()` (`wvSaveConfig`,
+  takes a JSON string), `applySaved`, `restartReasons`, `openSettings`.
+- `settings.js`: tabs Channels / General / Raw YAML. Channels: add, delete,
+  drag-to-reorder by the grip (pointer events, so touch works; auto-scrolls
+  at the edges) plus up/down buttons that keep the moved card under the pointer, region input with a datalist, hide
+  selectors. Dirty tracking, a two-press discard, validation before the round trip. **Save**
+  writes and closes (notes such as "restart to apply" and the pending-file
+  warnings move to a toast); **Apply** writes and stays open. A failed save
+  always keeps the panel open with the reason.
+- `sidebar.js`: footer "Settings" button; channels now come from live
+  `wvState` (it returns `channels`), `wvConfigChanged()` refreshes the list.
+- Menu: Settings… (Cmd-,) in the app menu; the Channels menu is rebuilt on save.
+- `a.cfg` is swapped under `a.mu` on save; `channelList()` is the safe reader.
+- Tests: `settings_test.go`. The JS was checked by hand in a browser against a
+  mocked `wvGetConfig`/`wvSaveConfig`; there is no JS test suite.
+
+**Applies immediately (Go app):** the sidebar list, the Channels menu, the window
+title, the user agent (next page load). **Needs a restart:** window size, media
+settings, hide selectors (all three are baked into the user scripts injected at
+startup, and go-webview cannot remove or replace an injected script) and VPN
+region changes (the tunnel manager is built once). The save result lists which
+of these changed. In Swift, `removeAllUserScripts()` plus re-adding would make
+hide and media live too.
+
+**Known gaps:** keystrokes typed in the panel are stopped at the panel's host
+but a page listening in the capture phase on `window` can still see them; no
+file watcher yet, so `wvConfigChanged` fires only after the panel's own saves.
+
 ## Remaining steps
 
-2. Bridge: expose `tunnels`/`user_agent` in the JSON (names only), add
-   `wvGetConfig` / `wvSaveConfig` (calling `saveConfig`) and the file-change
-   event; make the sidebar read channels from live state rather than only
-   `__WV_BOOT`.
-3. `settings.js`: channel list editor first, then global settings, then the raw
-   tab. Gear button and Cmd-,.
-4. Swift port: the bridge and the menu only; `settings.js` is reused as is.
+2. (done) Bridge.
+3. (done) `settings.js`, gear button, Cmd-,.
+4. Try it in the real app (`make run`), then optional: a file watcher.
+5. Swift port: the bridge and the menu only; `settings.js` is reused as is.
 
 ## Related, already shipped
 

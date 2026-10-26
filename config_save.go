@@ -211,36 +211,43 @@ func saveConfig(cfgPath string, cfg *Config) (string, []string, error) {
 		return "", nil, fmt.Errorf("refusing to save: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := writeFileAtomic(target, data); err != nil {
 		return "", nil, err
+	}
+	return target, warns, nil
+}
+
+// writeFileAtomic replaces target with data, keeping the previous contents as
+// target+".bak". The original is copied, never moved, and the new file only
+// takes its place by a rename, so a failure at any step leaves it untouched.
+func writeFileAtomic(target string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
 	}
 	if old, err := os.Open(target); err == nil {
 		err = copyFile(target+".bak", old)
 		old.Close()
 		if err != nil {
-			return "", nil, fmt.Errorf("writing backup: %w", err)
+			return fmt.Errorf("writing backup: %w", err)
 		}
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(target), ".channels-*.tmp")
 	if err != nil {
-		return "", nil, err
+		return err
 	}
 	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return "", nil, err
+		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return "", nil, err
+		return err
 	}
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
-		return "", nil, err
+		return err
 	}
-	if err := os.Rename(tmp.Name(), target); err != nil {
-		return "", nil, err
-	}
-	return target, warns, nil
+	return os.Rename(tmp.Name(), target)
 }
 
 func copyFile(dst string, src io.Reader) error {
