@@ -38,28 +38,81 @@ final class VPNManager {
         current = region
     }
 
+    /// Tunnels being started, so a second request for the same region (a double
+    /// tap) waits for the first instead of starting another.
+    private var starting: [String: Task<Int32, Error>] = [:]
+
+    /// How long to wait for a tunnel before saying so. The start itself cannot be
+    /// cancelled and carries on; its result is kept for the next try.
+    private static let startTimeout = 20.0
+
     private func tunnel(for region: String, config: Config) async throws -> Int32 {
         if let port = ports[region] { return port }
 
-        guard let vpn = config.vpn else { throw VPNError("no vpn block in the config") }
-        guard let path = vpn.tunnels[region] else {
-            if let want = vpn.pending[region] {
-                throw VPNError("no WireGuard file for \(region) yet: add \(want)")
+        let start: Task<Int32, Error>
+        if let running = starting[region] {
+            start = running
+        } else {
+            guard let vpn = config.vpn else { throw VPNError("no vpn block in the config") }
+            guard let path = vpn.tunnels[region] else {
+                if let want = vpn.pending[region] {
+                    throw VPNError("no WireGuard file for \(region) yet: add \(want)")
+                }
+                throw VPNError("no wireguard config for region \"\(region)\"")
             }
-            throw VPNError("no wireguard config for region \"\(region)\"")
+
+            // Bringing the device up can take a moment: not on the main thread.
+            start = Task.detached {
+                Self.materialize(path)
+                var err = [CChar](repeating: 0, count: 512)
+                let port = TVVPNStart(path, &err, Int32(err.count))
+                if port < 0 { throw VPNError("starting wireguard for \(region): \(String(cString: err))") }
+                return port
+            }
+            starting[region] = start
+            // Record the outcome whenever it arrives, even after a timeout.
+            Task { [weak self] in
+                let port = try? await start.value
+                self?.starting[region] = nil
+                if let port { self?.ports[region] = port }
+            }
         }
 
-        // Bringing the device up can take a moment: not on the main thread.
-        let started: (port: Int32, error: String?) = await Task.detached {
-            Self.materialize(path)
-            var err = [CChar](repeating: 0, count: 512)
-            let port = TVVPNStart(path, &err, Int32(err.count))
-            return (port, port < 0 ? String(cString: err) : nil)
-        }.value
+        return try await Self.wait(for: start, seconds: Self.startTimeout, region: region)
+    }
 
-        if let message = started.error { throw VPNError("starting wireguard for \(region): \(message)") }
-        ports[region] = started.port
-        return started.port
+    private static func wait(for task: Task<Int32, Error>, seconds: Double, region: String) async throws -> Int32 {
+        try await withCheckedThrowingContinuation { cont in
+            let once = Once()
+            Task {
+                do {
+                    let port = try await task.value
+                    if once.claim() { cont.resume(returning: port) }
+                } catch {
+                    if once.claim() { cont.resume(throwing: error) }
+                }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                if once.claim() {
+                    cont.resume(throwing: VPNError(
+                        "The \(region) tunnel did not come up within \(Int(seconds)) s. Check the network, and that its .conf file has finished downloading from iCloud; tap the channel to try again."))
+                }
+            }
+        }
+    }
+}
+
+/// Lets exactly one of two racing tasks resume a continuation.
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if claimed { return false }
+        claimed = true
+        return true
     }
 }
 
