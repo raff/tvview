@@ -20,7 +20,7 @@ final class WebHost: NSObject {
 
     /// Functions the injected scripts call; each becomes `window.<name>()`
     /// returning a promise, like go-webview's Bind.
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog"]
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -56,10 +56,14 @@ final class WebHost: NSObject {
     /// Registers the user scripts for `cfg`. The static pieces mirror what
     /// main.go's inject() does with Init.
     func install(config cfg: Config) {
+        installed = cfg
         webView.customUserAgent = cfg.userAgent
 
         let boot = Self.json(["channels": cfg.channels.map(Self.object), "media": Self.object(cfg.media)])
-        let bootJS = "window.__WV_BOOT = \(boot);"
+        // The screen's size and insets go in with the boot data, so the very first
+        // layout of the sidebar already knows them (see __wvFitViewport).
+        let safeJS = safe.isEmpty ? "" : " window.__wvSafe = \(Self.json(safe));"
+        let bootJS = "window.__WV_BOOT = \(boot);" + safeJS
         let shim = """
         (function () {
           \(Self.json(Self.bound)).forEach(function (n) {
@@ -101,12 +105,17 @@ final class WebHost: NSObject {
     // MARK: safe area
 
     private var safe: [String: Double] = [:]
+    private var installed: Config?
 
     /// The insets of the screen the page is drawn under (camera cutout, corners,
     /// home indicator), which the page cannot see for itself. Remembered, and
     /// sent again after each page commits.
-    func setSafeArea(top: Double, left: Double, bottom: Double, right: Double) {
-        safe = ["top": top, "left": left, "bottom": bottom, "right": right]
+    func setSafeArea(top: Double, left: Double, bottom: Double, right: Double, width: Double, height: Double) {
+        let now = ["top": top, "left": left, "bottom": bottom, "right": right, "width": width, "height": height]
+        guard now != safe else { return }
+        safe = now
+        // Pages loaded from here on get it at document start; the one on screen gets it now.
+        if let installed { install(config: installed) }
         sendSafeArea()
     }
 
@@ -162,6 +171,9 @@ final class WebHost: NSObject {
             return (nil, nil)
         case "wvSetOpen":
             if let open = args.first as? Bool { model.setSidebarOpen(open) }
+            return (nil, nil)
+        case "wvLog":
+            NSLog("tvview: page: %@", (args.first as? String) ?? "")
             return (nil, nil)
         case "wvGetConfig":
             return (SettingsPanel.view(of: model.cfg, defaultText: AppModel.defaultConfigText), nil)

@@ -218,26 +218,51 @@
   // The panels use percentages (never vw/vh, which stay in the layout
   // viewport's units) so they follow the host. At zoom 1, which is every
   // ordinary page and the desktop, this does nothing. Shared with settings.js.
+  //
+  // The zoom is the screen's width in points divided by the visible width in
+  // CSS pixels, where the app reports the screen (window.__wvSafe.width, set by
+  // wvSafeArea), and visualViewport.scale otherwise. vv.scale and vv.width can
+  // disagree for a moment while a page is being laid out, and using their
+  // product squashed the whole UI into a sliver; this takes one number from the
+  // app and one from the page, and corrects itself on the next resize.
+  var fits = [];
   window.__wvFitViewport = function (el) {
     var vv = window.visualViewport;
     if (!vv) return;
+    var last = "";
     function fit() {
-      var s = vv.scale;
+      var safe = window.__wvSafe || {};
+      var w = safe.width || vv.width * vv.scale;
+      var h = safe.height || vv.height * vv.scale;
+      var s = safe.width && vv.width > 0 ? safe.width / vv.width : vv.scale;
+      var mode;
       if (!(s > 0) || Math.abs(s - 1) < 0.02) {
+        mode = "plain";
         el.style.width = "0";
         el.style.height = "0";
         el.style.transform = "";
-        return;
+      } else {
+        mode = "scaled " + s.toFixed(3) + " " + Math.round(w) + "x" + Math.round(h);
+        el.style.width = w + "px";
+        el.style.height = h + "px";
+        el.style.transformOrigin = "0 0";
+        el.style.transform = "translate(" + vv.offsetLeft + "px, " + vv.offsetTop + "px) scale(" + 1 / s + ")";
       }
-      el.style.width = vv.width * s + "px";
-      el.style.height = vv.height * s + "px";
-      el.style.transformOrigin = "0 0";
-      el.style.transform = "translate(" + vv.offsetLeft + "px, " + vv.offsetTop + "px) scale(" + 1 / s + ")";
+      if (mode !== last) {
+        last = mode;
+        log("viewport " + mode + " (vv " + vv.width + "x" + vv.height + " @" + vv.scale + ")");
+      }
     }
+    fits.push(fit);
     vv.addEventListener("resize", fit);
     vv.addEventListener("scroll", fit);
     fit();
   };
+
+  // Diagnostics for the app's log; a no-op where the host does not bind it.
+  function log(msg) {
+    if (window.wvLog) window.wvLog(msg);
+  }
 
   // Screen areas the page is drawn under but must not put controls in: the
   // camera cutout, rounded corners, the home indicator. The page itself cannot
@@ -259,6 +284,7 @@
       var h = document.getElementById(id);
       if (h) applySafe(h);
     });
+    fits.forEach(function (f) { f(); }); // the screen size may have changed
   };
 
   function build() {

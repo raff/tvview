@@ -30,8 +30,9 @@ struct ContentView: View {
         GeometryReader { geo in
             content
             #if os(iOS)
-                .onAppear { push(geo.safeAreaInsets) }
-                .onChange(of: geo.safeAreaInsets) { _, v in push(v) }
+                .onAppear { push(geo.safeAreaInsets, geo.size) }
+                .onChange(of: geo.safeAreaInsets) { _, v in push(v, geo.size) }
+                .onChange(of: geo.size) { _, v in push(geo.safeAreaInsets, v) }
             #endif
         }
         #if os(macOS)
@@ -47,8 +48,10 @@ struct ContentView: View {
     #if os(iOS)
     /// The page extends under the camera cutout and corners, so tell it where
     /// they are and let the sidebar keep its controls out of them.
-    private func push(_ i: EdgeInsets) {
-        model.host.setSafeArea(top: i.top, left: i.leading, bottom: i.bottom, right: i.trailing)
+    private func push(_ i: EdgeInsets, _ size: CGSize) {
+        model.host.setSafeArea(
+            top: i.top, left: i.leading, bottom: i.bottom, right: i.trailing,
+            width: size.width + i.leading + i.trailing, height: size.height + i.top + i.bottom)
     }
     #endif
 

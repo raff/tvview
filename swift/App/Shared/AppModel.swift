@@ -144,6 +144,7 @@ final class AppModel: ObservableObject {
     }
 
     private func showVPN(_ state: String, _ text: String) {
+        NSLog("tvview: overlay %@: %@", state, text)
         vpnSt = ["state": state, "text": text]
         host.run("window.wvVPN && window.wvVPN(\(WebHost.json(vpnSt!)));")
     }
