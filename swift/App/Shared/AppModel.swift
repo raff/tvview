@@ -261,6 +261,10 @@ final class AppModel: ObservableObject {
         host.reset()
         vpnSt = nil
         host.load(current)
+        // A reset lands on the same page, which may block again: watch it as a
+        // channel switch does, or the person is left on a blank page with no word.
+        let region = regionFor(current)
+        if !region.isEmpty { watchForStall(current, region: region) }
     }
     func back() { host.webView.goBack() }
     func forward() { host.webView.goForward() }
