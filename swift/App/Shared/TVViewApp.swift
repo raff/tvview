@@ -2,8 +2,20 @@ import SwiftUI
 import TVCore
 import UniformTypeIdentifiers
 
+#if os(macOS)
+/// Closing the window ends the app, as in the Go app. Without this the process
+/// outlives its window: the page keeps playing, the VPN interfaces stay up, and
+/// there is nothing on screen to close.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
+#endif
+
 @main
 struct TVViewApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @StateObject private var model = AppModel()
 
     init() {

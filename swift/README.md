@@ -206,6 +206,41 @@ would be the same ideas through purego (`_webProcessIdentifier` is on the same o
 - Testing the macOS tunnel needs a person: the administrator dialog cannot be driven.
   Pick channels from the Channels menu with System Events, then watch `ifconfig -l`.
 
+## macOS parity with the Go app
+
+Checked by running both. **Same:** the page scripts (sidebar, hide, media session, settings
+panel), config format and search order (iCloud `tvview/`, `~/.config/tvview/`), user agent,
+the kernel tunnel via `vpnhelper` (BBC iPlayer loads), the channel and View menus with
+the same shortcuts, frozen-page recovery, closing the window quits.
+
+**Found and fixed while comparing** (both were real gaps in the first Swift builds):
+- The page's Fullscreen API was off, so a player's own fullscreen button could not work
+  (`document.fullscreenEnabled` was `undefined`; the Go app's embedded library turns it
+  on). Now `isElementFullscreenEnabled`. What fullscreen then *looks like* in the SwiftUI
+  window was not tried.
+- Closing the window left the app running with no window (page still playing, tunnels
+  up). Now the app quits with its last window.
+
+**Still different or missing in the Swift app:**
+- **Cmd-Q** quits at once; the Go app asks for a second press (Chrome style,
+  `quit_darwin.go`). The Quit menu item quits at once in both.
+- **Packaging:** only Debug builds, ad-hoc signed, for this machine's architecture. No
+  Release or universal build, no `make install`, no notarization (the Go app has
+  `make app`, `universal`, `install`).
+- **Flags:** no `-config` or `-debug`; environment variables instead
+  (`TVVIEW_CONFIG_FOLDER`, `TVVIEW_HOME`, `TVVPN_USERSPACE`), and the web inspector only
+  in Debug builds.
+- **First run** does not write a default `channels.yaml`; the built-in one is used until
+  the first save from the settings panel.
+- **Last channel** is kept in `UserDefaults`, not in the Go app's `last_channel` file, so
+  the two apps do not share it.
+- **Channels menu** has no checkmark on the current channel.
+- **Passwordless `vpnhelper`:** `scripts/install-vpn-helper.sh` was not tried with this
+  bundle's path.
+- Not checked on the Mac Swift app at all: media keys and the headphone seek, Picture in
+  Picture, downloads and HTTP auth prompts (the scripts are shared, so the first two are
+  likely fine).
+
 ## Status
 
 Working (checked by running both targets): config loading and validation,

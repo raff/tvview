@@ -41,6 +41,9 @@ final class WebHost: NSObject, ObservableObject {
         let config = WKWebViewConfiguration()
         config.userContentController = controller
         config.mediaTypesRequiringUserActionForPlayback = []
+        // The page's own fullscreen button (requestFullscreen) is how a player goes
+        // fullscreen; off by default, where the Go app's embedded library turns it on.
+        config.preferences.isElementFullscreenEnabled = true
         #if os(iOS)
         config.allowsInlineMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = true
