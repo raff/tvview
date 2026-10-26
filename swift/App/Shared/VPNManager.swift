@@ -51,6 +51,7 @@ final class VPNManager {
 
         // Bringing the device up can take a moment: not on the main thread.
         let started: (port: Int32, error: String?) = await Task.detached {
+            Self.materialize(path)
             var err = [CChar](repeating: 0, count: 512)
             let port = TVVPNStart(path, &err, Int32(err.count))
             return (port, port < 0 ? String(cString: err) : nil)
@@ -59,6 +60,17 @@ final class VPNManager {
         if let message = started.error { throw VPNError("starting wireguard for \(region): \(message)") }
         ports[region] = started.port
         return started.port
+    }
+}
+
+extension VPNManager {
+    /// A file in iCloud Drive can be on the server only. A coordinated read makes
+    /// the system bring it down, so WireGuard's plain open finds the contents.
+    nonisolated static func materialize(_ path: String) {
+        var error: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: URL(fileURLWithPath: path), options: [], error: &error) { url in
+            _ = try? Data(contentsOf: url)
+        }
     }
 }
 

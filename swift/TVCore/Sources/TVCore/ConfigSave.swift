@@ -47,7 +47,7 @@ extension Config {
                 out[region] = pendingText(region) // canonical; also turns a bare null into text
                 let where_ = ConfigPaths.pendingPath(path, region: region) ?? "the wireguard folder"
                 warnings.append("region \(region) has no WireGuard file yet: add \(where_)")
-            } else if !ConfigPaths.isFile(ConfigPaths.expandTilde(v)) {
+            } else if !ConfigPaths.isFile(ConfigPaths.resolveTunnel(v, cfgPath: path)) {
                 warnings.append("region \(region): \(v) does not exist")
             }
         }

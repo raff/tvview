@@ -42,7 +42,7 @@ public enum SettingsPanel {
         let regions: [[String: String]] = tunnels.keys.sorted().map { name in
             let v = tunnels[name]!
             let state = isPending(v) ? "pending"
-                : ConfigPaths.isFile(ConfigPaths.expandTilde(v)) ? "ok" : "missing"
+                : ConfigPaths.isFile(ConfigPaths.resolveTunnel(v, cfgPath: cfg.path)) ? "ok" : "missing"
             return ["name": name, "state": state]
         }
 

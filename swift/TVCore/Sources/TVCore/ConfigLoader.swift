@@ -91,7 +91,7 @@ extension Config {
 
         for (region, p) in vpn.declared {
             if !isPending(p) {
-                vpn.tunnels[region] = ConfigPaths.expandTilde(p)
+                vpn.tunnels[region] = ConfigPaths.resolveTunnel(p, cfgPath: path)
                 continue
             }
             // Not an error: it becomes usable the moment the file lands, with

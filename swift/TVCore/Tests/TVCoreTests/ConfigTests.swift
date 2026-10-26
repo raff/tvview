@@ -98,6 +98,34 @@ final class ConfigTests: XCTestCase {
         XCTAssertNotNil(cfg.vpn?.pending["UK"])
     }
 
+    /// A tunnel path written on the Mac (`~/Library/Mobile Documents/...`) means
+    /// nothing on iOS, where `~` is the app's sandbox: the file of that name in
+    /// the wireguard folder beside the config is used instead.
+    func testTunnelFileIsFoundBesideTheConfigWhenItsWrittenPathIsNotThere() throws {
+        let dir = home + "/cfg"
+        try FileManager.default.createDirectory(atPath: dir + "/wireguard", withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: dir + "/wireguard/IT.conf", contents: Data("[Interface]\n".utf8))
+        let path = dir + "/channels.yaml"
+        try """
+        channels:
+          - {title: Rai, url: "https://r", region: IT}
+        vpn:
+          tunnels:
+            IT: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf
+        """.write(toFile: path, atomically: true, encoding: .utf8)
+
+        let cfg = try Config.load(path: path, defaultText: "")
+        XCTAssertEqual(cfg.vpn?.tunnels["IT"], dir + "/wireguard/IT.conf")
+        XCTAssertEqual(cfg.vpn?.declared["IT"], "~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf",
+                       "what the file said is kept for saving")
+
+        // A path that does exist wins over a same-named file beside the config.
+        FileManager.default.createFile(atPath: home + "/real.conf", contents: Data("x".utf8))
+        XCTAssertEqual(ConfigPaths.resolveTunnel("~/real.conf", cfgPath: path), home + "/real.conf")
+        // Neither there: the written path, so the message names what was asked for.
+        XCTAssertEqual(ConfigPaths.resolveTunnel("~/nope/X.conf", cfgPath: path), home + "/nope/X.conf")
+    }
+
     func testPendingRegionCannotEscapeTheFolder() {
         XCTAssertNil(ConfigPaths.pendingPath(home + "/cfg/channels.yaml", region: "../x"))
     }

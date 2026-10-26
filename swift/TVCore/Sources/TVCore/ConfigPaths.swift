@@ -90,6 +90,21 @@ public enum ConfigPaths {
         return (dir as NSString).appendingPathComponent(region + ".conf")
     }
 
+    /// The file a `tunnels` value names. The value is usually written as a path on
+    /// the machine that wrote it (`~/Library/Mobile Documents/.../IT.conf`); on
+    /// another machine, and above all on iOS where `~` is the app's own sandbox,
+    /// that path does not exist. When it does not, a file of the same name in the
+    /// wireguard folder beside the config is the same file, shared with it.
+    public static func resolveTunnel(_ value: String, cfgPath: String?) -> String {
+        let named = expandTilde(value)
+        if isFile(named) { return named }
+        if let dir = wireguardDir(cfgPath) {
+            let beside = (dir as NSString).appendingPathComponent((named as NSString).lastPathComponent)
+            if isFile(beside) { return beside }
+        }
+        return named
+    }
+
     public static func isFile(_ path: String) -> Bool {
         var isDir: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && !isDir.boolValue
