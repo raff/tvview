@@ -40,10 +40,14 @@ targets:
       - { path: ../channels.yaml, buildPhase: resources }
     dependencies:
       - package: TVCore
+      - framework: build/TVVPN.xcframework
+        embed: false
     settings:
       base:
         PRODUCT_NAME: TV View
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The in-process WireGuard library (swift/vpn) is Go and wants these.
+        OTHER_LDFLAGS: "-lresolv -framework CoreFoundation -framework Security"
         PRODUCT_BUNDLE_IDENTIFIER: io.github.raff.tvview.swift
         CODE_SIGN_IDENTITY: "-"
         # Unsandboxed so the config is found in iCloud Drive/tvview and
@@ -75,10 +79,14 @@ targets:
       - { path: ../channels.yaml, buildPhase: resources }
     dependencies:
       - package: TVCore
+      - framework: build/TVVPN.xcframework
+        embed: false
     settings:
       base:
         PRODUCT_NAME: TV View
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The in-process WireGuard library (swift/vpn) is Go and wants these.
+        OTHER_LDFLAGS: "-lresolv -framework CoreFoundation -framework Security"
         PRODUCT_BUNDLE_IDENTIFIER: io.github.raff.tvview.swift
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: YES

@@ -15,6 +15,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var startupError: String?
 
     let host: WebHost
+    let vpn = VPNManager()
+    /// Last status shown by the page's VPN overlay, replayed to pages that load
+    /// while a tunnel is still coming up (see wvState).
+    private(set) var vpnSt: [String: String]?
     /// The VPN setup the app started with, to tell whether a save needs a restart.
     let runningVPN: VPNConfig?
 
@@ -46,7 +50,15 @@ final class AppModel: ObservableObject {
         host = WebHost()
         host.model = self
         host.install(config: loaded)
-        host.load(current)
+        // A channel that needs a tunnel must not be fetched before there is one:
+        // about:blank gives the status overlay a document to appear in, and keeps
+        // the site from ever seeing the unrouted address.
+        if regionFor(current).isEmpty {
+            host.load(current)
+        } else {
+            host.load("about:blank")
+            Task { await enter(current) }
+        }
     }
 
     static var defaultConfigText: String {
@@ -61,7 +73,43 @@ final class AppModel: ObservableObject {
     func select(_ url: String) {
         current = url
         UserDefaults.standard.set(url, forKey: "lastChannel")
+        if vpn.current == regionFor(url) {
+            vpnSt = nil // a stale error must not follow us to the new page
+            host.load(url)
+        } else {
+            Task { await enter(url) }
+        }
+    }
+
+    func regionFor(_ url: String) -> String {
+        cfg.channels.first { $0.url == url }?.region ?? ""
+    }
+
+    /// Puts the right tunnel up and then goes to `url`, narrating the wait into
+    /// the page it is leaving. Port of enterChannel in main.go.
+    private func enter(_ url: String) async {
+        let region = regionFor(url)
+        showVPN("working", region.isEmpty ? "Disconnecting…" : "Connecting to \(region)…")
+        do {
+            try await vpn.ensure(region, config: cfg, store: host.webView.configuration.websiteDataStore)
+        } catch {
+            // The user may have picked something else while this negotiated; that
+            // switch owns the outcome now. Otherwise stay put: loading the
+            // channel anyway would show a geo-block that looks like the site's fault.
+            if current == url { showVPN("error", error.localizedDescription) }
+            return
+        }
+        objectWillChange.send() // the window title shows which region is up
+        guard current == url else { return }
+        // Keep the spinner through the gap until the new page commits.
+        showVPN("working", "Loading…")
+        vpnSt = nil
         host.load(url)
+    }
+
+    private func showVPN(_ state: String, _ text: String) {
+        vpnSt = ["state": state, "text": text]
+        host.run("window.wvVPN && window.wvVPN(\(WebHost.json(vpnSt!)));")
     }
 
     /// Next (delta 1) or previous (-1) channel, wrapping around the ends.
@@ -117,7 +165,9 @@ final class AppModel: ObservableObject {
 
     var windowTitle: String {
         guard let ch = cfg.channels.first(where: { $0.url == current }) else { return cfg.window.title }
-        return cfg.window.title + " — " + ch.title
+        var title = cfg.window.title + " — " + ch.title
+        if !vpn.current.isEmpty { title += "  [VPN \(vpn.current)]" }
+        return title
     }
 
     // MARK: menu actions, reaching the page

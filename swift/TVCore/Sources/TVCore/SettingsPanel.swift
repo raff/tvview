@@ -62,7 +62,7 @@ public enum SettingsPanel {
     /// its page scripts on save (the Swift app does, so media and hide changes
     /// need no restart; the Go app cannot).
     public static func save(
-        request: String, current: Config, running: VPNConfig?, liveScripts: Bool
+        request: String, current: Config, running: VPNConfig?, liveScripts: Bool, liveVPN: Bool = false
     ) -> SaveOutcome {
         func fail(_ message: String) -> SaveOutcome {
             SaveOutcome(response: ["ok": false, "error": message], config: nil)
@@ -118,7 +118,8 @@ public enum SettingsPanel {
             response: [
                 "ok": true,
                 "warnings": warnings,
-                "restart": restartReasons(old: current, new: fresh, running: running, liveScripts: liveScripts),
+                "restart": restartReasons(
+                    old: current, new: fresh, running: running, liveScripts: liveScripts, liveVPN: liveVPN),
             ],
             config: fresh)
     }
@@ -126,7 +127,7 @@ public enum SettingsPanel {
     /// Changes that only apply on the next launch, because what they configure
     /// was built once at startup.
     public static func restartReasons(
-        old: Config, new: Config, running: VPNConfig?, liveScripts: Bool
+        old: Config, new: Config, running: VPNConfig?, liveScripts: Bool, liveVPN: Bool = false
     ) -> [String] {
         var r: [String] = []
         if old.window.width != new.window.width || old.window.height != new.window.height {
@@ -138,7 +139,9 @@ public enum SettingsPanel {
                 r.append("hidden page elements")
             }
         }
-        if running?.tunnels != new.vpn?.tunnels || running?.pending != new.vpn?.pending {
+        // A host that reads the config each time it needs a tunnel (the Swift app)
+        // has nothing to restart; one that built its tunnel manager once does.
+        if !liveVPN && (running?.tunnels != new.vpn?.tunnels || running?.pending != new.vpn?.pending) {
             r.append("VPN regions")
         }
         return r

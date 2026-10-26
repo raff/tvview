@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-test swift-mac swift-ios swift-run swift-clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-vpn swift-test swift-mac swift-ios swift-run swift-clean
 
 all: build
 
@@ -140,12 +140,21 @@ swift-gen:
 swift-test:
 	cd $(SWIFT_DIR)/TVCore && swift test
 
-swift-mac: swift-gen
+## swift-vpn: the in-process WireGuard library the Swift app links (Go, built
+## for macOS, iPhone and the simulator; a few minutes). Built once; rebuild it
+## with this target after changing swift/vpn.
+swift-vpn:
+	$(SWIFT_DIR)/vpn/build.sh
+
+$(SWIFT_DIR)/build/TVVPN.xcframework:
+	$(SWIFT_DIR)/vpn/build.sh
+
+swift-mac: swift-gen $(SWIFT_DIR)/build/TVVPN.xcframework
 	$(XCODEBUILD) -scheme TVView-macOS build
 
 ## swift-ios: builds for the simulator; a device build needs DEVELOPMENT_TEAM
 ## set in swift/project.yml.
-swift-ios: swift-gen
+swift-ios: swift-gen $(SWIFT_DIR)/build/TVVPN.xcframework
 	$(XCODEBUILD) -scheme TVView-iOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 
 swift-run: swift-mac

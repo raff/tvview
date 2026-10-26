@@ -155,6 +155,12 @@ final class SaveTests: XCTestCase {
 
         let goHost = SettingsPanel.restartReasons(old: cfg, new: out.config!, running: cfg.vpn, liveScripts: false)
         XCTAssertTrue(goHost.contains("media settings") && goHost.contains("hidden page elements"))
+
+        // The Swift app reads the live config each time it needs a tunnel, so
+        // changed regions need no restart there.
+        let swiftApp = SettingsPanel.restartReasons(
+            old: cfg, new: out.config!, running: cfg.vpn, liveScripts: true, liveVPN: true)
+        XCTAssertEqual(swiftApp, ["window size"])
     }
 
     func testSaveFromPanelRejects() throws {

@@ -155,6 +155,7 @@ final class WebHost: NSObject {
                 "open": model.sidebarOpen,
                 "current": model.current,
                 "channels": model.cfg.channels.map(Self.object),
+                "vpn": model.vpnSt as Any? ?? NSNull(),
             ] as [String: Any], nil)
         case "wvSelect":
             if let url = args.first as? String { model.select(url) }
@@ -170,7 +171,9 @@ final class WebHost: NSObject {
                 request: request, current: model.cfg, running: model.runningVPN,
                 // install(config:) below re-registers the page scripts, so
                 // hide selectors and media settings apply from the next page.
-                liveScripts: true)
+                liveScripts: true,
+                // The manager reads the live config each time a tunnel is needed.
+                liveVPN: true)
             if let fresh = out.config { model.apply(fresh) }
             return (out.response, nil)
         default:

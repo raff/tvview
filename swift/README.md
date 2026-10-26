@@ -64,6 +64,29 @@ the other way, the app runs `window.wvToggleSidebar()` etc. in that world.
 `hide.js` and `mediasession.js` stay in the page's world (`navigator.mediaSession`
 must be the page's own).
 
+## VPN
+
+IT/UK-style channels (`region:` in the config) go through an **in-process**
+WireGuard tunnel: `swift/vpn` is a small Go library (the same wireguard-go and
+SOCKS5 code the Go app used before it moved to kernel interfaces) built as a
+static library for macOS, iPhone/iPad and the simulator, and packaged as
+`swift/build/TVVPN.xcframework` by `make swift-vpn` (`swift/vpn/build.sh`; a
+few minutes, once). `VPNManager` starts a region's tunnel the first time a
+channel needs it and points the web view's data store at its local SOCKS5 port;
+nothing else on the device is routed. The status overlay, the `[VPN IT]` title
+and the "add IT.conf to ..." message for pending files work as in the Go app.
+`go run ./swift/vpn/cmd/tvvpncheck file.conf` brings a config up and prints its
+exit address, to check a `.conf` without the app.
+
+**Known limit:** it is a userspace TCP stack, and some CDNs drop those
+connections. Seen with BBC iPlayer: the page loads over the UK tunnel but its
+images and video do not, the reason the Go app switched to a real interface
+(see the README, "Why a real interface"). RaiPlay and most other sites work.
+The fix on a phone would be a Network Extension (system VPN, device-wide while
+connected); not built. The arm64 simulator slice (Apple Silicon Macs) builds and
+is tagged for the simulator, but has not been run (this was developed on an
+Intel Mac).
+
 ## Status
 
 Working (checked by running both targets): config loading and validation,
@@ -84,8 +107,6 @@ not touch your real config).
 
 Not done yet:
 
-- VPN: regions load and validate, but no tunnel is raised (needs a
-  `NEPacketTunnelProvider` extension; see `../PORTING.md`).
 - The settings panel was not driven by hand on the iPad simulator (touch drag
   in particular), and the sidebar toggle is faint on a touch screen.
 - The folder picker itself and the bookmark round trip were not exercised (the
