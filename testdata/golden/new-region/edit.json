@@ -1,0 +1,7 @@
+{"window": {"title": "TV View", "width": 1200, "height": 900},
+ "media": {"seekSeconds": 10, "reverse": false},
+ "user_agent": "",
+ "channels": [
+  {"title": "A", "url": "https://a", "region": "", "hide": []},
+  {"title": "BBC", "url": "https://b", "region": "UK", "hide": []}
+ ]}

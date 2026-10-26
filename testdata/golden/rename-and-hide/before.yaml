@@ -1,0 +1,7 @@
+# a comment that a structured save will drop
+window: {title: Mine, width: 800, height: 600}
+media: {seek_seconds: 30, reverse: true}
+user_agent: custom/1.0
+channels:
+  - {title: A, url: "https://a", hide: [".x", ".y"]}
+  - {title: B, url: "https://b"}

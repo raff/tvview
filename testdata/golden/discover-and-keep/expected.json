@@ -1,0 +1,30 @@
+{
+  "config": {
+    "channels": [
+      {
+        "hide": [],
+        "region": "DE",
+        "title": "DE",
+        "url": "https://d"
+      }
+    ],
+    "media": {
+      "reverse": false,
+      "seekSeconds": 10
+    },
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+    "window": {
+      "height": 900,
+      "title": "TV View",
+      "width": 1200
+    }
+  },
+  "tunnels": {
+    "DE": "~/cfg/other.conf",
+    "ES": "~/cfg/gone.conf",
+    "FR": "~/cfg/wireguard/FR.conf"
+  },
+  "warnings": [
+    "region ES: ~/cfg/gone.conf does not exist"
+  ]
+}

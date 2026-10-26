@@ -1,0 +1,6 @@
+channels:
+  - {title: DE, url: "https://d", region: DE}
+vpn:
+  tunnels:
+    DE: ~/cfg/other.conf
+    ES: ~/cfg/gone.conf

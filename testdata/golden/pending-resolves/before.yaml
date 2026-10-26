@@ -1,0 +1,7 @@
+channels:
+  - {title: Rai, url: "https://r", region: IT}
+  - {title: BBC, url: "https://b", region: UK}
+vpn:
+  tunnels:
+    IT: "### add IT.conf here"
+    UK: "### add UK.conf here"

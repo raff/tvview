@@ -1,0 +1,7 @@
+{"window": {"title": "Mine", "width": 900, "height": 600},
+ "media": {"seekSeconds": 30, "reverse": true},
+ "user_agent": "custom/1.0",
+ "channels": [
+  {"title": "B", "url": "https://b", "region": "", "hide": ["#banner"]},
+  {"title": "A renamed", "url": "https://a", "region": "", "hide": [".x"]}
+ ]}

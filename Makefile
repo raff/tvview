@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-test swift-mac swift-ios swift-run swift-clean
 
 all: build
 
@@ -120,6 +120,39 @@ diff-config:
 edit-config:
 	mkdir -p "$(CONFIG_DIR)/wireguard"
 	$(EDITOR) "$(CONFIG_DIR)/channels.yaml"
+
+# --- The Swift app (swift/): macOS and iPad -------------------------------
+
+SWIFT_DIR  := swift
+XCODEBUILD := xcodebuild -project $(SWIFT_DIR)/TVView.xcodeproj -configuration Debug -derivedDataPath $(SWIFT_DIR)/build
+
+## test: Go tests, then the Swift core tests. Both run the cases in
+## testdata/golden, so a change to saving that only one app picks up fails here.
+test:
+	$(GO) test ./...
+	$(MAKE) --no-print-directory swift-test
+
+## swift-gen: regenerate swift/TVView.xcodeproj from swift/project.yml (needs
+## xcodegen). Run after editing project.yml or adding source files.
+swift-gen:
+	cd $(SWIFT_DIR) && xcodegen generate
+
+swift-test:
+	cd $(SWIFT_DIR)/TVCore && swift test
+
+swift-mac: swift-gen
+	$(XCODEBUILD) -scheme TVView-macOS build
+
+## swift-ios: builds for the simulator; a device build needs DEVELOPMENT_TEAM
+## set in swift/project.yml.
+swift-ios: swift-gen
+	$(XCODEBUILD) -scheme TVView-iOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+swift-run: swift-mac
+	open "$(SWIFT_DIR)/build/Build/Products/Debug/TV View.app"
+
+swift-clean:
+	rm -rf $(SWIFT_DIR)/build $(SWIFT_DIR)/TVCore/.build $(SWIFT_DIR)/TVView.xcodeproj
 
 clean:
 	rm -rf $(APP) $(BINARY) $(BINARY)-amd64 $(BINARY)-arm64 $(BINARY)-universal

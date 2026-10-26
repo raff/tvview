@@ -1,0 +1,138 @@
+{
+  "config": {
+    "channels": [
+      {
+        "hide": [
+          "123"
+        ],
+        "region": "",
+        "title": "123",
+        "url": "https://x/0"
+      },
+      {
+        "hide": [
+          "true"
+        ],
+        "region": "",
+        "title": "true",
+        "url": "https://x/1"
+      },
+      {
+        "hide": [
+          "null"
+        ],
+        "region": "",
+        "title": "null",
+        "url": "https://x/2"
+      },
+      {
+        "hide": [
+          "~"
+        ],
+        "region": "",
+        "title": "~",
+        "url": "https://x/3"
+      },
+      {
+        "hide": [
+          "### x"
+        ],
+        "region": "",
+        "title": "### x",
+        "url": "https://x/4"
+      },
+      {
+        "hide": [
+          "a: b"
+        ],
+        "region": "",
+        "title": "a: b",
+        "url": "https://x/5"
+      },
+      {
+        "hide": [
+          "#hash"
+        ],
+        "region": "",
+        "title": "#hash",
+        "url": "https://x/6"
+      },
+      {
+        "hide": [
+          "NASA+"
+        ],
+        "region": "",
+        "title": "NASA+",
+        "url": "https://x/7"
+      },
+      {
+        "hide": [
+          "it's"
+        ],
+        "region": "",
+        "title": "it's",
+        "url": "https://x/8"
+      },
+      {
+        "hide": [
+          "\"q\""
+        ],
+        "region": "",
+        "title": "\"q\"",
+        "url": "https://x/9"
+      },
+      {
+        "hide": [
+          "- dash"
+        ],
+        "region": "",
+        "title": "- dash",
+        "url": "https://x/10"
+      },
+      {
+        "hide": [
+          "é ü"
+        ],
+        "region": "",
+        "title": "é ü",
+        "url": "https://x/11"
+      },
+      {
+        "hide": [
+          "on"
+        ],
+        "region": "",
+        "title": "on",
+        "url": "https://x/12"
+      },
+      {
+        "hide": [
+          "1.5"
+        ],
+        "region": "",
+        "title": "1.5",
+        "url": "https://x/13"
+      },
+      {
+        "hide": [
+          "0x10"
+        ],
+        "region": "",
+        "title": "0x10",
+        "url": "https://x/14"
+      }
+    ],
+    "media": {
+      "reverse": false,
+      "seekSeconds": 10
+    },
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+    "window": {
+      "height": 900,
+      "title": "TV View",
+      "width": 1200
+    }
+  },
+  "tunnels": null,
+  "warnings": []
+}

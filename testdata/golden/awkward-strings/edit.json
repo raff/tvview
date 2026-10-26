@@ -1,0 +1,134 @@
+{
+ "window": {
+  "title": "TV View",
+  "width": 1200,
+  "height": 900
+ },
+ "media": {
+  "seekSeconds": 10,
+  "reverse": false
+ },
+ "user_agent": "",
+ "channels": [
+  {
+   "title": "123",
+   "url": "https://x/0",
+   "region": "",
+   "hide": [
+    "123"
+   ]
+  },
+  {
+   "title": "true",
+   "url": "https://x/1",
+   "region": "",
+   "hide": [
+    "true"
+   ]
+  },
+  {
+   "title": "null",
+   "url": "https://x/2",
+   "region": "",
+   "hide": [
+    "null"
+   ]
+  },
+  {
+   "title": "~",
+   "url": "https://x/3",
+   "region": "",
+   "hide": [
+    "~"
+   ]
+  },
+  {
+   "title": "### x",
+   "url": "https://x/4",
+   "region": "",
+   "hide": [
+    "### x"
+   ]
+  },
+  {
+   "title": "a: b",
+   "url": "https://x/5",
+   "region": "",
+   "hide": [
+    "a: b"
+   ]
+  },
+  {
+   "title": "#hash",
+   "url": "https://x/6",
+   "region": "",
+   "hide": [
+    "#hash"
+   ]
+  },
+  {
+   "title": "NASA+",
+   "url": "https://x/7",
+   "region": "",
+   "hide": [
+    "NASA+"
+   ]
+  },
+  {
+   "title": "it's",
+   "url": "https://x/8",
+   "region": "",
+   "hide": [
+    "it's"
+   ]
+  },
+  {
+   "title": "\"q\"",
+   "url": "https://x/9",
+   "region": "",
+   "hide": [
+    "\"q\""
+   ]
+  },
+  {
+   "title": "- dash",
+   "url": "https://x/10",
+   "region": "",
+   "hide": [
+    "- dash"
+   ]
+  },
+  {
+   "title": "é ü",
+   "url": "https://x/11",
+   "region": "",
+   "hide": [
+    "é ü"
+   ]
+  },
+  {
+   "title": "on",
+   "url": "https://x/12",
+   "region": "",
+   "hide": [
+    "on"
+   ]
+  },
+  {
+   "title": "1.5",
+   "url": "https://x/13",
+   "region": "",
+   "hide": [
+    "1.5"
+   ]
+  },
+  {
+   "title": "0x10",
+   "url": "https://x/14",
+   "region": "",
+   "hide": [
+    "0x10"
+   ]
+  }
+ ]
+}

@@ -17,6 +17,9 @@ reasoning and `../SETTINGS.md` for the settings-panel design.
 
 ## Build and run
 
+From the repo root: `make test` (Go + Swift tests), `make swift-mac`, `make swift-ios`,
+`make swift-run`. Or by hand:
+
 ```sh
 cd swift
 xcodegen generate                       # after editing project.yml or adding files
@@ -60,6 +63,9 @@ channel list in the sidebar, switching channels, last channel remembered, user
 agent, per-channel hide selectors, sidebar toggle from the menu (Cmd-\\), the
 Channels menu with Cmd-1…9, Reload / Back / Forward, window title.
 
+Saving is checked by `../testdata/golden`, which the Go and Swift tests both run
+(`GoldenTests.swift`, `golden_test.go`): same input and panel edit, same meaning out.
+
 Settings panel: `wvGetConfig` / `wvSaveConfig` are implemented in `TVCore`
 (`SettingsPanel`, `ConfigSave`: reconciling `vpn.tunnels`, `.bak`, atomic write)
 and wired into `WebHost`. Saving re-registers the page scripts, so hide selectors
@@ -76,6 +82,3 @@ Not done yet:
   in particular), and the sidebar toggle is faint on a touch screen.
 - iCloud config on iOS, the fullscreen/PiP behaviour on a real device, the
   headphone seek behaviour on a real device, an app icon, signing for distribution.
-- Wiring `swift test` and a build of both targets into the Makefile.
-- A golden-file test shared with the Go side (both apps are covered by mirrored
-  tests, not by one fixture yet).

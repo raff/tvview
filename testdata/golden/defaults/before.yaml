@@ -1,0 +1,4 @@
+channels:
+  - url: "https://a"
+  - {title: "  B  ", url: " https://b ", hide: ["  .x  ", ""]}
+  - {title: dropped}

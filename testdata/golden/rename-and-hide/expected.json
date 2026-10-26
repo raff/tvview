@@ -1,0 +1,34 @@
+{
+  "config": {
+    "channels": [
+      {
+        "hide": [
+          "#banner"
+        ],
+        "region": "",
+        "title": "B",
+        "url": "https://b"
+      },
+      {
+        "hide": [
+          ".x"
+        ],
+        "region": "",
+        "title": "A renamed",
+        "url": "https://a"
+      }
+    ],
+    "media": {
+      "reverse": true,
+      "seekSeconds": 30
+    },
+    "user_agent": "custom/1.0",
+    "window": {
+      "height": 600,
+      "title": "Mine",
+      "width": 900
+    }
+  },
+  "tunnels": null,
+  "warnings": []
+}

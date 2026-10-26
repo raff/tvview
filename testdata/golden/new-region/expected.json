@@ -1,0 +1,34 @@
+{
+  "config": {
+    "channels": [
+      {
+        "hide": [],
+        "region": "",
+        "title": "A",
+        "url": "https://a"
+      },
+      {
+        "hide": [],
+        "region": "UK",
+        "title": "BBC",
+        "url": "https://b"
+      }
+    ],
+    "media": {
+      "reverse": false,
+      "seekSeconds": 10
+    },
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+    "window": {
+      "height": 900,
+      "title": "TV View",
+      "width": 1200
+    }
+  },
+  "tunnels": {
+    "UK": "### add UK.conf here"
+  },
+  "warnings": [
+    "region UK has no WireGuard file yet: add $HOME/cfg/wireguard/UK.conf"
+  ]
+}
