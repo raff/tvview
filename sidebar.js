@@ -38,6 +38,12 @@
   var current = "";
   var settledAt = 0;
   var navigating = false;
+  // navigating suppresses click-away dismissal while a channel switch tears this page
+  // down. It must not outlive the switch: when the new page never arrives (a tunnel
+  // that fails to start, a site that hangs) this page stays, and a flag left set
+  // forever made clicking outside stop closing the panel.
+  var NAVIGATING_FOR = 6000;
+  var navigatingTimer = 0;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
 
   // Go may report a tunnel before build() has run — the eval races the user
@@ -432,6 +438,10 @@
   function select(url) {
     current = url;
     navigating = true;
+    clearTimeout(navigatingTimer);
+    navigatingTimer = setTimeout(function () {
+      navigating = false;
+    }, NAVIGATING_FOR);
     renderList();
     if (window.wvSelect) window.wvSelect(url);
   }
@@ -456,6 +466,11 @@
     if (!vpnBox) {
       vpnPending = s;
       return;
+    }
+    // A failed switch leaves this page in place: it is no longer going anywhere.
+    if (s.state === "error") {
+      navigating = false;
+      clearTimeout(navigatingTimer);
     }
     var on = s.state === "working" || s.state === "error";
     vpnBox.classList.toggle("on", on);
