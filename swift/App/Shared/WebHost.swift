@@ -202,8 +202,37 @@ private final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
 }
 
 extension WebHost: WKNavigationDelegate, WKUIDelegate {
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        NSLog("tvview: loading %@", webView.url?.absoluteString ?? "(none)")
+    }
+
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        NSLog("tvview: committed %@", webView.url?.absoluteString ?? "(none)")
         sendSafeArea()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        NSLog("tvview: finished %@", webView.url?.absoluteString ?? "(none)")
+        model?.pageFinished()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        failed(webView, error)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        failed(webView, error)
+    }
+
+    /// A load that fails otherwise just leaves the old (or a blank) page up, which
+    /// looks like a hang. Say so, except for the cancellations every redirect and
+    /// quick channel switch causes.
+    private func failed(_ webView: WKWebView, _ error: Error) {
+        let e = error as NSError
+        NSLog("tvview: load failed (%@ %ld): %@", e.domain, e.code, e.localizedDescription)
+        if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
+        if e.domain == "WebKitErrorDomain" && e.code == 102 { return } // interrupted by a policy change (a download, a deep link)
+        model?.pageFailed(e)
     }
 
     /// target=_blank and window.open would otherwise do nothing in a view with

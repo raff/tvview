@@ -89,10 +89,14 @@ final class AppModel: ObservableObject {
     /// the page it is leaving. Port of enterChannel in main.go.
     private func enter(_ url: String) async {
         let region = regionFor(url)
+        NSLog("tvview: switching to %@ (region %@)", url, region.isEmpty ? "none" : region)
+        let began = Date()
         showVPN("working", region.isEmpty ? "Disconnecting…" : "Connecting to \(region)…")
         do {
             try await vpn.ensure(region, config: cfg, store: host.webView.configuration.websiteDataStore)
+            NSLog("tvview: tunnel for %@ ready in %.1fs", region.isEmpty ? "none" : region, Date().timeIntervalSince(began))
         } catch {
+            NSLog("tvview: tunnel for %@ failed after %.1fs: %@", region, Date().timeIntervalSince(began), error.localizedDescription)
             // The user may have picked something else while this negotiated; that
             // switch owns the outcome now. Otherwise stay put: loading the
             // channel anyway would show a geo-block that looks like the site's fault.
@@ -105,6 +109,38 @@ final class AppModel: ObservableObject {
         showVPN("working", "Loading…")
         vpnSt = nil
         host.load(url)
+        if !region.isEmpty { watchForStall(url, region: region) }
+    }
+
+    /// Some CDNs (BBC iPlayer's) silently drop connections from this tunnel's
+    /// userspace TCP stack, so a page's HTML arrives and its scripts and images
+    /// never do: nothing fails, it just never finishes. After a while, say so
+    /// rather than leave a page that looks hung. Cleared if the load does finish.
+    private func watchForStall(_ url: String, region: String) {
+        stallHint = false
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 25_000_000_000)
+            guard let self, self.current == url, self.vpn.current == region, self.host.webView.isLoading else { return }
+            self.stallHint = true
+            self.showVPN("error", "Still loading after 25 s through the \(region) tunnel. Some sites (BBC iPlayer) block this kind of tunnel and their pages never finish.")
+        }
+    }
+
+    private var stallHint = false
+
+    /// The page finished loading: take down a stall message if one was showing.
+    func pageFinished() {
+        guard stallHint else { return }
+        stallHint = false
+        showVPN("done", "")
+    }
+
+    /// A page failed to load: show why in the status overlay instead of leaving a
+    /// blank or stale page.
+    func pageFailed(_ error: NSError) {
+        var text = "The page could not be loaded: \(error.localizedDescription)"
+        if !vpn.current.isEmpty { text += " (through the \(vpn.current) tunnel)" }
+        showVPN("error", text)
     }
 
     private func showVPN(_ state: String, _ text: String) {

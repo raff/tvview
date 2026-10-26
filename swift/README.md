@@ -79,8 +79,12 @@ and the "add IT.conf to ..." message for pending files work as in the Go app.
 exit address, to check a `.conf` without the app.
 
 **Known limit:** it is a userspace TCP stack, and some CDNs drop those
-connections. Seen with BBC iPlayer: the page loads over the UK tunnel but its
-images and video do not, the reason the Go app switched to a real interface
+connections. Seen with BBC iPlayer: through the UK tunnel the page's HTML
+arrives (`www.bbc.co.uk`, 200 in about a second) but `static.files.bbci.co.uk`
+and `ichef.bbci.co.uk`, which hold its scripts, styles and images, never answer
+(`go run ./swift/vpn/cmd/tvvpncheck UK.conf https://static.files.bbci.co.uk/`
+times out), so the page never finishes. After 25 s a message says so. This is
+the reason the Go app switched to a real interface
 (see the README, "Why a real interface"). RaiPlay and most other sites work.
 The fix on a phone would be a Network Extension (system VPN, device-wide while
 connected); not built. The arm64 simulator slice (Apple Silicon Macs) builds and
