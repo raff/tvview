@@ -81,7 +81,7 @@
     ".spacer { flex: none; width: 18px; }",
     ".toast {",
     "  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);",
-    "  max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px;",
+    "  max-width: min(560px, calc(100% - 32px)); padding: 10px 16px;",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee; background: rgba(40,40,50,0.97);",
     "  border: 1px solid rgba(255,255,255,0.18); border-radius: 10px;",
@@ -696,6 +696,7 @@
     root.appendChild(el("style", { text: CSS }));
     root.appendChild(scrim);
     document.documentElement.appendChild(host);
+    if (window.__wvFitViewport) window.__wvFitViewport(host);
 
     keyHandler = function (e) {
       if (e.key === "Escape") {

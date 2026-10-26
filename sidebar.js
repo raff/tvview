@@ -92,7 +92,7 @@
 
     ".panel {",
     "  position: fixed; top: 0; left: 0;",
-    "  width: " + PANEL_WIDTH + "px; height: 100vh;",
+    "  width: " + PANEL_WIDTH + "px; height: 100%;",
     "  display: flex; flex-direction: column;",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
     "  color: #e9e9ee;",
@@ -173,7 +173,7 @@
     // pause is doing something.
     ".vpn {",
     "  position: fixed; top: 50%; left: 50%;",
-    "  transform: translate(-50%, -50%); max-width: 70vw; min-width: 260px;",
+    "  transform: translate(-50%, -50%); max-width: 70%; min-width: 260px;",
     "  display: none; align-items: center; justify-content: center; gap: 16px;",
     "  padding: 24px 34px;",
     "  font: 500 20px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
@@ -195,6 +195,34 @@
     ".vpn.err .spin { display: none; }",
     "@keyframes sp { to { transform: rotate(360deg); } }"
   ].join("\n");
+
+  // A page with no mobile viewport tag is laid out about 980px wide and shrunk to
+  // fit a phone, and anything injected into it is shrunk with it. Undo that:
+  // size the host to the visible area in screen pixels and scale it by the
+  // inverse of the page's zoom, so one unit inside is one pixel on the screen.
+  // The panels use percentages (never vw/vh, which stay in the layout
+  // viewport's units) so they follow the host. At zoom 1, which is every
+  // ordinary page and the desktop, this does nothing. Shared with settings.js.
+  window.__wvFitViewport = function (el) {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    function fit() {
+      var s = vv.scale;
+      if (!(s > 0) || Math.abs(s - 1) < 0.02) {
+        el.style.width = "0";
+        el.style.height = "0";
+        el.style.transform = "";
+        return;
+      }
+      el.style.width = vv.width * s + "px";
+      el.style.height = vv.height * s + "px";
+      el.style.transformOrigin = "0 0";
+      el.style.transform = "translate(" + vv.offsetLeft + "px, " + vv.offsetTop + "px) scale(" + 1 / s + ")";
+    }
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    fit();
+  };
 
   function build() {
     host = document.createElement("div");
@@ -304,6 +332,7 @@
 
     renderList();
     document.documentElement.appendChild(host);
+    window.__wvFitViewport(host);
 
     // A status that arrived while the DOM was still being assembled.
     if (vpnPending) {
