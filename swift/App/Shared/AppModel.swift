@@ -218,6 +218,35 @@ final class AppModel: ObservableObject {
         return title
     }
 
+    // MARK: quitting (macOS)
+
+    /// Shown for a moment after a first Cmd-Q.
+    @Published private(set) var quitPromptVisible = false
+    private var quitArmedAt: Date?
+
+    /// Chrome's asymmetry, as in the Go app: choosing Quit from the menu is a
+    /// deliberate act and quits at once, while Cmd-Q, which is easy to hit while
+    /// reaching for Cmd-W or Tab, has to be pressed twice. The two are told apart
+    /// by the event that triggered the command: a key equivalent leaves a key-down
+    /// as the current event, a click leaves a mouse event.
+    func requestQuit() {
+        #if os(macOS)
+        let fromKeyboard = NSApp.currentEvent?.type == .keyDown
+        if !fromKeyboard || (quitArmedAt.map { Date().timeIntervalSince($0) <= 2.0 } ?? false) {
+            NSApp.terminate(nil)
+            return
+        }
+        quitArmedAt = Date()
+        quitPromptVisible = true
+        Task { [weak self] in
+            // Outlives the arming window a little, so the prompt never vanishes
+            // while a second press would still count.
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            self?.quitPromptVisible = false
+        }
+        #endif
+    }
+
     // MARK: menu actions, reaching the page
 
     func toggleSidebar() { host.run("window.wvToggleSidebar && window.wvToggleSidebar();") }

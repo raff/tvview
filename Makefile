@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-vpn swift-test swift-mac swift-ios swift-run swift-clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-vpn swift-test swift-mac swift-ios swift-run swift-release swift-install swift-clean
 
 all: build
 
@@ -94,8 +94,10 @@ install: app
 ## time, by installing a sudoers.d rule scoped to this exact binary path.
 ## One-time (needs re-running only if the app moves); see the script for
 ## details, and uninstall-vpn-helper to undo it.
+## No argument: it covers every app of ours in /Applications (this Go app and the
+## Swift "TV View.app"), so installing one never drops the other's rule.
 install-vpn-helper:
-	sudo ./scripts/install-vpn-helper.sh /Applications/$(APP)
+	sudo ./scripts/install-vpn-helper.sh
 
 uninstall-vpn-helper:
 	sudo ./scripts/uninstall-vpn-helper.sh
@@ -125,6 +127,8 @@ edit-config:
 
 SWIFT_DIR  := swift
 XCODEBUILD := xcodebuild -project $(SWIFT_DIR)/TVView.xcodeproj -configuration Debug -derivedDataPath $(SWIFT_DIR)/build
+XCODEBUILD_RELEASE := xcodebuild -project $(SWIFT_DIR)/TVView.xcodeproj -configuration Release -derivedDataPath $(SWIFT_DIR)/build
+SWIFT_APP := TV View.app
 
 ## test: Go tests, then the Swift core tests. Both run the cases in
 ## testdata/golden, so a change to saving that only one app picks up fails here.
@@ -159,6 +163,19 @@ swift-ios: $(SWIFT_DIR)/build/TVVPN.xcframework swift-gen
 
 swift-run: swift-mac
 	open "$(SWIFT_DIR)/build/Build/Products/Debug/TV View.app"
+
+## swift-release: the Mac app as a Release build for both Apple Silicon and Intel, ad-hoc
+## signed, in swift/build/Build/Products/Release.
+swift-release: $(SWIFT_DIR)/build/TVVPN.xcframework swift-gen
+	$(XCODEBUILD_RELEASE) -scheme TVView-macOS ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
+	@lipo -archs "$(SWIFT_DIR)/build/Build/Products/Release/$(SWIFT_APP)/Contents/MacOS/TV View"
+
+## swift-install: replace /Applications/TV View.app with the Release build. Run
+## `make install-vpn-helper` (with sudo) after this once, for no password prompts.
+swift-install: swift-release
+	rm -rf "/Applications/$(SWIFT_APP)"
+	cp -R "$(SWIFT_DIR)/build/Build/Products/Release/$(SWIFT_APP)" /Applications/
+	@echo "installed /Applications/$(SWIFT_APP)"
 
 swift-clean:
 	rm -rf $(SWIFT_DIR)/build $(SWIFT_DIR)/TVCore/.build $(SWIFT_DIR)/TVView.xcodeproj

@@ -92,6 +92,19 @@ struct ContentView: View {
             .padding()
         }
         .ignoresSafeArea()
+        #if os(macOS)
+        // Centered, above everything, like the Go app's prompt.
+        .overlay {
+            if model.quitPromptVisible {
+                Text("Press ⌘Q again to Quit")
+                    .font(.title2.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                    .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 14))
+            }
+        }
+        #endif
     }
 }
 
@@ -158,6 +171,11 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
+        #if os(macOS)
+        CommandGroup(replacing: .appTermination) {
+            Button("Quit TV View") { model.requestQuit() }.keyboardShortcut("q")
+        }
+        #endif
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { model.openSettings() }.keyboardShortcut(",")
         }

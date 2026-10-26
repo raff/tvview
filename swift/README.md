@@ -211,7 +211,9 @@ would be the same ideas through purego (`_webProcessIdentifier` is on the same o
 Checked by running both. **Same:** the page scripts (sidebar, hide, media session, settings
 panel), config format and search order (iCloud `tvview/`, `~/.config/tvview/`), user agent,
 the kernel tunnel via `vpnhelper` (BBC iPlayer loads), the channel and View menus with
-the same shortcuts, frozen-page recovery, closing the window quits.
+the same shortcuts, frozen-page recovery, closing the window quits, and Cmd-Q asks for a
+second press (the Quit menu item quits at once, as in the Go app; the two are told apart by
+the triggering event).
 
 **Found and fixed while comparing** (both were real gaps in the first Swift builds):
 - The page's Fullscreen API was off, so a player's own fullscreen button could not work
@@ -222,11 +224,9 @@ the same shortcuts, frozen-page recovery, closing the window quits.
   up). Now the app quits with its last window.
 
 **Still different or missing in the Swift app:**
-- **Cmd-Q** quits at once; the Go app asks for a second press (Chrome style,
-  `quit_darwin.go`). The Quit menu item quits at once in both.
-- **Packaging:** only Debug builds, ad-hoc signed, for this machine's architecture. No
-  Release or universal build, no `make install`, no notarization (the Go app has
-  `make app`, `universal`, `install`).
+- **Notarization:** `make swift-release` / `swift-install` give a universal, ad-hoc signed
+  Release app (the Go app's `make app`/`universal`/`install`); nothing is notarized or
+  signed with the Developer ID certificate yet.
 - **Flags:** no `-config` or `-debug`; environment variables instead
   (`TVVIEW_CONFIG_FOLDER`, `TVVIEW_HOME`, `TVVPN_USERSPACE`), and the web inspector only
   in Debug builds.
@@ -235,11 +235,27 @@ the same shortcuts, frozen-page recovery, closing the window quits.
 - **Last channel** is kept in `UserDefaults`, not in the Go app's `last_channel` file, so
   the two apps do not share it.
 - **Channels menu** has no checkmark on the current channel.
-- **Passwordless `vpnhelper`:** `scripts/install-vpn-helper.sh` was not tried with this
-  bundle's path.
 - Not checked on the Mac Swift app at all: media keys and the headphone seek, Picture in
   Picture, downloads and HTTP auth prompts (the scripts are shared, so the first two are
   likely fine).
+
+## Installing on a Mac, with no password prompts
+
+```sh
+make swift-install            # Release build, universal, into /Applications/TV View.app
+make install-vpn-helper       # asks for sudo once; covers TV View.app and the Go TVView.app
+```
+
+`scripts/install-vpn-helper.sh` writes one NOPASSWD sudoers rule per installed app, each
+pinned to that app's `Contents/MacOS/vpnhelper` (paths with spaces are escaped;
+`--check` prints and validates what it would write, without root). The shared tunnel code
+tries `sudo -n` first and only falls back to the administrator dialog, so after this a
+region starts with no prompt. Read the script's header for the trade: the rule trusts
+whatever file is at that path, and an app in `/Applications` is normally yours, so
+anything running as you could swap the helper and run it as root. Undo with
+`scripts/uninstall-vpn-helper.sh`. The rule was generated and validated here but **not
+installed or exercised** (it needs your password); the first region start after installing
+it is the test.
 
 ## Status
 
