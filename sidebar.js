@@ -49,6 +49,9 @@
     ":host { all: initial; }",
     "* { box-sizing: border-box; margin: 0; padding: 0; }",
 
+    // The panel is PANEL_WIDTH wide, less on a narrow screen so the back/forward
+    // pill (top right, about 130px) never lands on the panel's close button.
+    ".wrap { --pw: min(" + PANEL_WIDTH + "px, calc(100% - 150px)); }",
     ".toggle {",
     "  position: fixed; top: calc(10px + var(--st, 0px)); left: calc(10px + var(--sl, 0px));",
     "  width: 36px; height: 36px;",
@@ -60,11 +63,12 @@
     "  border-radius: 9px;",
     "  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);",
     "  cursor: pointer; opacity: 0.22; z-index: 2;",
-    "  transition: opacity .18s ease, transform .24s cubic-bezier(.4,0,.2,1);",
+    "  transition: opacity .18s ease, left .24s cubic-bezier(.4,0,.2,1);",
     "}",
     // Idle-faded so it does not sit on top of video; wakes on hover or when open.
     ".toggle:hover, .wrap.open .toggle, .wrap.near .toggle { opacity: 1; }",
-    ".wrap.open .toggle { transform: translateX(" + PANEL_WIDTH + "px); }",
+    // Open, it is the panel's close button: inside it, at the top right.
+    ".wrap.open .toggle { left: calc(var(--pw) - 46px); }",
 
     // Back/forward pill, top right (top centre is where a phone's camera
     // cutout is). Invisible and click-through until the pointer approaches,
@@ -95,7 +99,7 @@
 
     ".panel {",
     "  position: fixed; top: 0; left: 0;",
-    "  width: " + PANEL_WIDTH + "px; height: 100%;",
+    "  width: var(--pw); height: 100%;",
     "  display: flex; flex-direction: column;",
     "  padding: var(--st, 0px) 0 var(--sb, 0px) var(--sl, 0px);",
     "  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;",
@@ -111,7 +115,8 @@
     ".wrap.no-anim .panel, .wrap.no-anim .toggle { transition: none; }",
 
     ".head {",
-    "  padding: 16px 16px 10px 58px;",
+    // Tall enough to centre the title on the close button at its right.
+    "  display: flex; align-items: center; min-height: 56px; padding: 0 56px 0 16px;",
     "  font-size: 11px; font-weight: 600;",
     "  letter-spacing: .09em; text-transform: uppercase;",
     "  color: rgba(233,233,238,0.45);",
@@ -274,7 +279,7 @@
     toggle.className = "toggle";
     toggle.type = "button";
     toggle.title = "Channels (F9)";
-    toggle.textContent = "☰";
+    toggle.textContent = "\u2630";
     toggle.addEventListener("click", function () {
       setOpen(!open, true);
     });
@@ -402,6 +407,8 @@
     open = !!next;
     wrap.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.textContent = open ? "\u2715" : "\u2630";
+    toggle.title = open ? "Close (F9)" : "Channels (F9)";
     if (notify && window.wvSetOpen) window.wvSetOpen(open);
   }
 
