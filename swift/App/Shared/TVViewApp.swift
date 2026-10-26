@@ -32,7 +32,7 @@ struct ContentView: View {
             WebViewContainer(webView: model.host.webView)
             VStack(spacing: 8) {
                 #if os(iOS)
-                if model.usingBuiltIn { folderPrompt }
+                if model.usingBuiltIn && !model.folderPromptDismissed { folderPrompt }
                 #endif
                 if let err = model.startupError {
                     Text("Using built-in channels: \(err)")
@@ -73,6 +73,17 @@ extension ContentView {
         .padding(12)
         .frame(maxWidth: 420)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(alignment: .topTrailing) {
+            Button {
+                model.folderPromptDismissed = true
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .padding(6)
+            }
+            .accessibilityLabel("Dismiss")
+        }
     }
 }
 #endif

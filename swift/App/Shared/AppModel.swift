@@ -20,6 +20,9 @@ final class AppModel: ObservableObject {
 
     /// iOS: asks the picker for the folder holding channels.yaml.
     @Published var showFolderPicker = false
+    /// The prompt was closed without choosing. Not remembered: it comes back
+    /// on the next launch, until a folder is chosen.
+    @Published var folderPromptDismissed = false
 
     init() {
         #if os(iOS)
