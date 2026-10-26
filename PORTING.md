@@ -54,12 +54,18 @@ sharing the three JS files and `channels.yaml`.
 
 ## VPN
 
-Needs a `NEPacketTunnelProvider` Network Extension (WireGuard-Go), same
-extension code on macOS and iPadOS. Requires the paid developer account and the
-Network Extension entitlement, plus a separate extension target. It replaces
-`vpnhelper` and the wireproxy fallback, and moves tunnel config into the system
-VPN settings. Easiest first step is to leave it out and use the system VPN or
-the WireGuard app.
+**Decided (see `swift/README.md`, "VPN: where we are and what is next"):** the two
+platforms get different tunnels, for different reasons.
+
+- **macOS** must behave like the Go app: a real kernel interface raised by
+  `vpnhelper`, with only the web view's traffic bound to it. A system-wide
+  Network Extension would fight a company VPN that is up at the same time, and a
+  userspace tunnel is dropped by BBC iPlayer's CDN.
+- **iOS/iPadOS** uses a `NEPacketTunnelProvider` (system VPN, device-wide while
+  connected), which is acceptable there and uses the real TCP stack, so BBC works.
+
+An in-process userspace tunnel (built, working) covers sites that do not mind it
+and is what runs today on both platforms.
 
 ## Sharing config and logins across machines
 

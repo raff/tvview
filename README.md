@@ -6,6 +6,10 @@ define in a YAML file.
 
 No Electron, no CGO — one static binary and a config file.
 
+There is also a Swift edition for macOS and iPad/iPhone in [`swift/`](swift/README.md),
+which reuses this app's page scripts and config format. It is not finished
+(VPN regions are the main gap); that README says where it stands.
+
 ```
 ┌──────────────┬──────────────────────────────┐
 │ ☰            │                              │
