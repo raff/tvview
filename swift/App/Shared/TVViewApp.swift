@@ -59,6 +59,7 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             Color.black
             WebViewContainer(webView: model.host.webView)
+                .id(ObjectIdentifier(model.host.webView)) // a replaced web view needs a new container
             VStack(spacing: 8) {
                 #if os(iOS)
                 if model.usingBuiltIn && !model.folderPromptDismissed { folderPrompt }
@@ -67,7 +68,7 @@ struct ContentView: View {
                 // is showing an error (a tunnel that would not start, a page that
                 // never finishes), the page may be too broken to open its own
                 // sidebar, and this app restores the last channel on every launch.
-                if model.vpnSt?["state"] == "error" { escapeBar }
+                if model.vpnSt?["state"] == "error" || model.host.unresponsive { escapeBar }
                 if let err = model.startupError {
                     Text("Using built-in channels: \(err)")
                         .font(.footnote)
@@ -85,6 +86,9 @@ struct ContentView: View {
 extension ContentView {
     var escapeBar: some View {
         HStack(spacing: 12) {
+            if model.host.unresponsive {
+                Text("This page is not responding.").font(.footnote)
+            }
             Menu {
                 ForEach(Array(model.cfg.channels.enumerated()), id: \.offset) { _, ch in
                     Button(ch.title) { model.select(ch.url) }
@@ -93,8 +97,12 @@ extension ContentView {
                 Label("Switch channel", systemImage: "list.bullet")
             }
             .buttonStyle(.borderedProminent)
-            Button("Dismiss") { model.dismissStatus() }
+            Button("Reset page") { model.resetPage() }
                 .buttonStyle(.bordered)
+            if !model.host.unresponsive {
+                Button("Dismiss") { model.dismissStatus() }
+                    .buttonStyle(.bordered)
+            }
         }
         .padding(10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -149,6 +157,7 @@ struct AppCommands: Commands {
         }
         CommandGroup(after: .toolbar) {
             Button("Reload") { model.reload() }.keyboardShortcut("r")
+            Button("Reset Web View") { model.resetPage() }.keyboardShortcut("r", modifiers: [.command, .option])
             Divider()
             Button("Back") { model.back() }.keyboardShortcut(.leftArrow)
             Button("Forward") { model.forward() }.keyboardShortcut(.rightArrow)

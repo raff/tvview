@@ -134,8 +134,9 @@ on-demand RaiPlay, if it needs it) gets a Network Extension, built into the app.
    `viewport scaled/plain ...` (see the log recipe below). Also install the current
    build on the phone (it has not been reinstalled since the macOS work; the iOS
    behaviour is unchanged).
-2. **Try RaiPlay movies and series on the Mac** (above). If they still fail through
-   the kernel tunnel, it is not the TCP stack, and the Go app is the reference.
+2. ~~Try RaiPlay movies and series on the Mac.~~ Checked: one movie fails the same way in
+   the pre-Swift Go app (commit `65510a6`), so it is the show or RaiPlay, not the tunnel.
+   Other on-demand titles were not exhaustively tried.
 3. **iOS: Network Extension.**
    - Portal: App ID `io.github.raff.tvview.swift.tunnel` with the Network Extensions
      capability, and the same capability on the app's ID (`io.github.raff.tvview.swift`,
@@ -156,6 +157,31 @@ on-demand RaiPlay, if it needs it) gets a Network Extension, built into the app.
      user declines the one-time "add VPN configuration" prompt.
    - Decide then whether iOS keeps the in-process tunnel as a fallback.
 4. Smaller items under *Status*.
+
+### A frozen page (done in the Swift app; not yet in the Go app)
+
+A page whose web process wedges (a RaiPlay movie whose player never starts; the same
+title fails identically in the pre-Swift Go app, so it is the site, not the app)
+used to trap the whole window: menus, Cmd-R, resizing and the sidebar all go to the
+frozen process and nothing happens; only quitting works. Now, in `WebHost`:
+
+- a watchdog pings the page every 3 s (`evaluateJavaScript("1")`) while the app is
+  frontmost; 12 s without an answer marks it `unresponsive`;
+- a native bar then offers **Reset page** and a channel menu, outside the page;
+- `reset()` builds a new `WKWebView` (own configuration, so its own web process; same
+  user scripts and data store, so logins and the VPN proxy carry over) and, on macOS,
+  ends the old process: dropping the view does not stop a process stuck in a loop (it
+  kept a core at 100% for minutes). The pid comes from WebKit's undocumented
+  `_webProcessIdentifier`, macOS only, guarded, and absent on iOS;
+- picking a channel, Cmd-R, or **View > Reset Web View** (Cmd-Opt-R) while it is
+  unresponsive replaces the view first, so the Channels menu works again.
+
+The ping closure must hold the web view **weakly** (a frozen page never calls back).
+Tested with a channel whose page loops forever (`data:text/html;base64,...` with
+`setTimeout(function(){for(;;){}},2000)`): flagged at ~15 s, channel switch recovers,
+no process left spinning. The Go app has the same trap and no equivalent yet; the port
+would be the same ideas through purego (`_webProcessIdentifier` is on the same object
+`webView()` already finds).
 
 ### Working notes (learned the hard way)
 

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import TVCore
@@ -15,6 +16,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var startupError: String?
 
     let host: WebHost
+    private var hostChanges: AnyCancellable?
     let vpn = VPNManager()
     /// Last status shown by the page's VPN overlay, replayed to pages that load
     /// while a tunnel is still coming up (see wvState).
@@ -49,6 +51,9 @@ final class AppModel: ObservableObject {
 
         host = WebHost()
         host.model = self
+        // The web view can be replaced, and the views showing it follow this model.
+        hostChanges = host.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        host.startWatchdog()
         host.install(config: loaded)
         // A channel that needs a tunnel must not be fetched before there is one:
         // about:blank gives the status overlay a document to appear in, and keeps
@@ -217,7 +222,17 @@ final class AppModel: ObservableObject {
 
     func toggleSidebar() { host.run("window.wvToggleSidebar && window.wvToggleSidebar();") }
     func openSettings() { host.run("window.wvOpenSettings && window.wvOpenSettings();") }
-    func reload() { host.webView.reload() }
+    func reload() {
+        if host.unresponsive { resetPage() } else { host.webView.reload() }
+    }
+
+    /// Replaces the web view, ending a frozen page's process, and loads the
+    /// current channel into the new one.
+    func resetPage() {
+        host.reset()
+        vpnSt = nil
+        host.load(current)
+    }
     func back() { host.webView.goBack() }
     func forward() { host.webView.goForward() }
 }

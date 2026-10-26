@@ -11,8 +11,13 @@ import WebKit
 /// not do. hide.js and mediasession.js stay in the page's world, where
 /// navigator.mediaSession is the page's own.
 @MainActor
-final class WebHost: NSObject {
-    let webView: WKWebView
+final class WebHost: NSObject, ObservableObject {
+    /// The web view on screen. It changes when `reset()` replaces it, which is why
+    /// the views that show it watch this object.
+    @Published private(set) var webView: WKWebView
+    /// The page has stopped answering the watchdog's pings: its web process is
+    /// frozen, so nothing sent to it (a load, a reload, a resize) will happen.
+    @Published private(set) var unresponsive = false
     weak var model: AppModel?
 
     private let world = WKContentWorld.world(name: "tvview")
@@ -23,6 +28,16 @@ final class WebHost: NSObject {
     private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog"]
 
     override init() {
+        webView = Self.makeWebView(controller: controller)
+        super.init()
+        configure(webView)
+        controller.addScriptMessageHandler(Bridge(self), contentWorld: world, name: "tv")
+    }
+
+    /// A web view with its own configuration, and so its own web process; all of
+    /// them share the user scripts (one controller) and the default data store
+    /// (logins, cookies, the VPN proxy).
+    private static func makeWebView(controller: WKUserContentController) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.userContentController = controller
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -30,26 +45,122 @@ final class WebHost: NSObject {
         config.allowsInlineMediaPlayback = true
         config.allowsPictureInPictureMediaPlayback = true
         #endif
-        webView = WKWebView(frame: .zero, configuration: config)
-        super.init()
+        return WKWebView(frame: .zero, configuration: config)
+    }
 
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
-        webView.allowsBackForwardNavigationGestures = true
+    private func configure(_ view: WKWebView) {
+        view.navigationDelegate = self
+        view.uiDelegate = self
+        view.allowsBackForwardNavigationGestures = true
         #if DEBUG
-        webView.isInspectable = true
+        view.isInspectable = true
         #endif
         #if os(iOS)
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.isOpaque = false
-        webView.backgroundColor = .black
-        webView.scrollView.backgroundColor = .black
+        view.scrollView.contentInsetAdjustmentBehavior = .never
+        view.isOpaque = false
+        view.backgroundColor = .black
+        view.scrollView.backgroundColor = .black
         #else
-        webView.underPageBackgroundColor = .black
+        view.underPageBackgroundColor = .black
         #endif
-
-        controller.addScriptMessageHandler(Bridge(self), contentWorld: world, name: "tv")
+        if let installed { view.customUserAgent = installed.userAgent }
     }
+
+    // MARK: a frozen page
+
+    private var lastPong = Date()
+    private var pinging = false
+    private var watchdog: Timer?
+    /// How long the page may go without answering before it counts as frozen.
+    private static let frozenAfter = 12.0
+
+    /// Starts pinging the page. A page whose web process is wedged (a stuck
+    /// player; seen on RaiPlay) answers nothing, not even the app's own reload or
+    /// a new channel: only a fresh web view gets out of it.
+    func startWatchdog() {
+        watchdog?.invalidate()
+        watchdog = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+    }
+
+    private var appIsActive: Bool {
+        #if os(macOS)
+        return NSApplication.shared.isActive
+        #else
+        return UIApplication.shared.applicationState == .active
+        #endif
+    }
+
+    private func tick() {
+        // A backgrounded app is not a frozen page.
+        guard appIsActive else {
+            lastPong = Date()
+            return
+        }
+        if !pinging {
+            pinging = true
+            // Weak: a frozen page never calls this back, and a strong reference
+            // here would keep the old web view, and its spinning process, alive
+            // after reset() replaced it.
+            weak var view = webView
+            view?.evaluateJavaScript("1") { [weak self, weak view] _, error in
+                if let error { NSLog("tvview: ping returned an error: %@", error.localizedDescription) }
+                Task { @MainActor in
+                    guard let self, let view, view === self.webView else { return }
+                    self.pinging = false
+                    self.lastPong = Date()
+                    if self.unresponsive {
+                        NSLog("tvview: the page is answering again")
+                        self.unresponsive = false
+                    }
+                }
+            }
+        }
+        if !unresponsive && Date().timeIntervalSince(lastPong) > Self.frozenAfter {
+            NSLog("tvview: the page has not answered for %.0f s", Self.frozenAfter)
+            unresponsive = true
+        }
+    }
+
+    /// Throws the web view away for a new one, which ends the old one's web
+    /// process however stuck it is. Callers load a page into the new view.
+    func reset() {
+        NSLog("tvview: replacing the web view")
+        let old = webView
+        #if os(macOS)
+        let oldProcess = Self.webProcessID(of: old)
+        #endif
+        let fresh = Self.makeWebView(controller: controller)
+        configure(fresh)
+        webView = fresh
+        old.navigationDelegate = nil
+        old.uiDelegate = nil
+        pinging = false
+        lastPong = Date()
+        unresponsive = false
+        #if os(macOS)
+        // Dropping the old view does not end a process that is stuck in a loop: it
+        // went on spinning a core for minutes. The view is being abandoned, so
+        // end its process.
+        if let oldProcess, oldProcess > 1 {
+            NSLog("tvview: ending the old web process %d", oldProcess)
+            kill(oldProcess, SIGKILL)
+        }
+        #endif
+    }
+
+    #if os(macOS)
+    /// The pid of a web view's web process, through WebKit's undocumented
+    /// `_webProcessIdentifier`. Used only to end a frozen process, on macOS, where
+    /// this app is not sandboxed or distributed through the App Store; nil if
+    /// WebKit does not have it.
+    private static func webProcessID(of view: WKWebView) -> pid_t? {
+        let key = "_webProcessIdentifier"
+        guard view.responds(to: NSSelectorFromString(key)) else { return nil }
+        return (view.value(forKey: key) as? NSNumber)?.int32Value
+    }
+    #endif
 
     // MARK: setup
 
@@ -127,6 +238,8 @@ final class WebHost: NSObject {
     // MARK: driving the page
 
     func load(_ urlString: String) {
+        // Into a frozen page nothing loads: start from a fresh web view.
+        if unresponsive { reset() }
         guard let url = URL(string: urlString) else { return }
         webView.load(URLRequest(url: url))
     }
