@@ -111,3 +111,37 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(Set(m.keys), ["seekSeconds", "reverse"])
     }
 }
+
+/// The user-chosen folder (iOS: picked in Files) wins over the platform defaults.
+final class ConfigFolderTests: XCTestCase {
+    var home: String!
+    override func setUpWithError() throws {
+        home = NSTemporaryDirectory() + "tvcore-folder-" + UUID().uuidString
+        try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true)
+        ConfigPaths.home = { [home] in home! }
+    }
+    override func tearDown() {
+        ConfigPaths.configFolder = nil
+        try? FileManager.default.removeItem(atPath: home)
+    }
+
+    func testFolderIsSearchedFirstAndIsTheSaveTarget() throws {
+        let folder = home + "/chosen"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        ConfigPaths.configFolder = folder
+        XCTAssertEqual(ConfigPaths.searchPaths().first, folder + "/channels.yaml")
+        XCTAssertEqual(ConfigPaths.saveTarget(nil), folder + "/channels.yaml")
+        XCTAssertEqual(ConfigPaths.wireguardDir(nil), folder + "/wireguard")
+
+        // Empty folder: the built-in default loads, and the first save lands there.
+        var cfg = try Config.load(defaultText: "channels:\n  - {title: A, url: \"https://a\"}\n")
+        XCTAssertNil(cfg.path)
+        cfg.channels[0].title = "Saved"
+        XCTAssertEqual(try cfg.save().path, folder + "/channels.yaml")
+
+        // From then on it is the config that loads.
+        let again = try Config.load(defaultText: "")
+        XCTAssertEqual(again.path, folder + "/channels.yaml")
+        XCTAssertEqual(again.channels[0].title, "Saved")
+    }
+}

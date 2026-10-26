@@ -10,6 +10,19 @@ public enum ConfigPaths {
         return NSHomeDirectory()
     }
 
+    /// A folder holding channels.yaml and wireguard/, chosen by the user (on iOS,
+    /// picked once in the Files UI and remembered). Checked before everything
+    /// else, and where a first save goes. TVVIEW_CONFIG_FOLDER sets it from the
+    /// environment, for trying a build against a scratch folder.
+    nonisolated(unsafe) public static var configFolder: String? = {
+        let v = ProcessInfo.processInfo.environment["TVVIEW_CONFIG_FOLDER"]
+        return (v?.isEmpty ?? true) ? nil : v
+    }()
+
+    private static func inFolder(_ dir: String) -> [String] {
+        ["channels.yaml", "channels.yml"].map { (dir as NSString).appendingPathComponent($0) }
+    }
+
     public static func expandTilde(_ path: String) -> String {
         guard path.hasPrefix("~/") else { return path }
         return (home() as NSString).appendingPathComponent(String(path.dropFirst(2)))
@@ -32,9 +45,7 @@ public enum ConfigPaths {
     }
 
     public static func searchPaths() -> [String] {
-        [iCloudDir(), userConfigDir()].flatMap { dir in
-            ["channels.yaml", "channels.yml"].map { (dir as NSString).appendingPathComponent($0) }
-        }
+        ([configFolder].compactMap { $0 } + [iCloudDir(), userConfigDir()]).flatMap(inFolder)
     }
     #else
     /// iOS: the app's Documents folder, which Files can show.
@@ -43,7 +54,7 @@ public enum ConfigPaths {
     }
 
     public static func searchPaths() -> [String] {
-        ["channels.yaml", "channels.yml"].map { (documentsDir() as NSString).appendingPathComponent($0) }
+        ([configFolder].compactMap { $0 } + [documentsDir()]).flatMap(inFolder)
     }
     #endif
 
@@ -51,6 +62,7 @@ public enum ConfigPaths {
     /// defaults, where seeding would put them.
     public static func saveTarget(_ path: String?) -> String? {
         if let path, !path.isEmpty { return path }
+        if let configFolder { return (configFolder as NSString).appendingPathComponent("channels.yaml") }
         #if os(macOS)
         var isDir: ObjCBool = false
         if FileManager.default.fileExists(atPath: iCloudDir(), isDirectory: &isDir), isDir.boolValue {

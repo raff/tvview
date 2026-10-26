@@ -18,7 +18,13 @@ final class AppModel: ObservableObject {
     /// The VPN setup the app started with, to tell whether a save needs a restart.
     let runningVPN: VPNConfig?
 
+    /// iOS: asks the picker for the folder holding channels.yaml.
+    @Published var showFolderPicker = false
+
     init() {
+        #if os(iOS)
+        ConfigFolder.restore()
+        #endif
         var loaded: Config
         var failure: String?
         do {
@@ -61,6 +67,39 @@ final class AppModel: ObservableObject {
         let i = list.firstIndex { $0.url == current } ?? 0
         select(list[(i + delta + list.count) % list.count].url)
     }
+
+    /// Reads the config again from wherever it lives now: after choosing a
+    /// folder, or after the file was edited elsewhere.
+    func reloadConfig() {
+        do {
+            let fresh = try Config.load(defaultText: AppModel.defaultConfigText)
+            startupError = nil
+            apply(fresh)
+            if !fresh.channels.contains(where: { $0.url == current }) { select(fresh.channels[0].url) }
+            host.run("window.wvConfigChanged && window.wvConfigChanged();")
+        } catch {
+            startupError = error.localizedDescription
+        }
+    }
+
+    /// True while the built-in channels are showing because no config file exists.
+    var usingBuiltIn: Bool { cfg.path == nil }
+
+    #if os(iOS)
+    func configFolderChosen(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            do {
+                try ConfigFolder.choose(url)
+                reloadConfig()
+            } catch {
+                startupError = "Could not use that folder: \(error.localizedDescription)"
+            }
+        case .failure(let error):
+            startupError = error.localizedDescription
+        }
+    }
+    #endif
 
     /// A save went through: take the new config. Page scripts are registered
     /// again, so hide selectors and media settings reach the next page load; the

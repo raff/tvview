@@ -1,5 +1,6 @@
 import SwiftUI
 import TVCore
+import UniformTypeIdentifiers
 
 @main
 struct TVViewApp: App {
@@ -29,16 +30,26 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             Color.black
             WebViewContainer(webView: model.host.webView)
-            if let err = model.startupError {
-                Text("Using built-in channels: \(err)")
-                    .font(.footnote)
-                    .padding(8)
-                    .background(.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
-                    .foregroundStyle(.white)
-                    .padding()
+            VStack(spacing: 8) {
+                #if os(iOS)
+                if model.usingBuiltIn { folderPrompt }
+                #endif
+                if let err = model.startupError {
+                    Text("Using built-in channels: \(err)")
+                        .font(.footnote)
+                        .padding(8)
+                        .background(.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(.white)
+                }
             }
+            .padding()
         }
         .ignoresSafeArea()
+        #if os(iOS)
+        .fileImporter(isPresented: $model.showFolderPicker, allowedContentTypes: [.folder]) {
+            model.configFolderChosen($0)
+        }
+        #endif
         #if os(macOS)
         .navigationTitle(model.windowTitle)
         #else
@@ -46,6 +57,25 @@ struct ContentView: View {
         #endif
     }
 }
+
+#if os(iOS)
+extension ContentView {
+    /// Shown while no config file is in use: the way to point the app at the
+    /// iCloud Drive `tvview` folder the Mac shares.
+    var folderPrompt: some View {
+        VStack(spacing: 6) {
+            Text("These are the built-in channels. To use your own, choose the tvview folder (the one with channels.yaml, normally in iCloud Drive).")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+            Button("Choose folder…") { model.showFolderPicker = true }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(12)
+        .frame(maxWidth: 420)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+#endif
 
 /// The menu bar on macOS, and the shortcut sheet on an iPad with a keyboard.
 /// Same shortcuts as menu_darwin.go.
@@ -56,6 +86,12 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { model.openSettings() }.keyboardShortcut(",")
+        }
+        CommandGroup(after: .importExport) {
+            Button("Reload Configuration") { model.reloadConfig() }.keyboardShortcut("r", modifiers: [.command, .shift])
+            #if os(iOS)
+            Button("Choose Config Folder…") { model.showFolderPicker = true }
+            #endif
         }
         CommandGroup(after: .toolbar) {
             Button("Reload") { model.reload() }.keyboardShortcut("r")

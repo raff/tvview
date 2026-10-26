@@ -43,8 +43,16 @@ Or open `TVView.xcodeproj` in Xcode. To run on a real iPad, set
   `tvview/channels.yaml`, then `~/.config/tvview/channels.yaml`, then the built-in
   default. The app is unsandboxed so it can read those (a Mac App Store build
   would need the sandbox and another location).
-- **iOS:** the app's Documents folder (visible in Files), then the built-in
-  default. Nothing seeds it yet; iCloud for iOS is not done.
+- **iOS:** an iOS app cannot reach into iCloud Drive by itself, so the first time
+  it shows the built-in channels with a **Choose folder…** prompt. Pick the same
+  iCloud Drive `tvview` folder the Mac uses; the choice is remembered (a
+  security-scoped bookmark) and the iPad then reads and saves the same
+  `channels.yaml` and `wireguard/` as the Mac. "Choose Config Folder…" in the
+  keyboard-shortcut menu changes it, and "Reload Configuration" (Shift-Cmd-R,
+  both platforms) re-reads the file after an edit elsewhere. Until a folder is
+  chosen, the app's Documents folder is searched, then the built-in default.
+  `TVVIEW_CONFIG_FOLDER` sets the folder from the environment (both platforms),
+  which is how the simulator was tested.
 
 ## How the page and the app talk
 
@@ -80,5 +88,8 @@ Not done yet:
   `NEPacketTunnelProvider` extension; see `../PORTING.md`).
 - The settings panel was not driven by hand on the iPad simulator (touch drag
   in particular), and the sidebar toggle is faint on a touch screen.
-- iCloud config on iOS, the fullscreen/PiP behaviour on a real device, the
+- The folder picker itself and the bookmark round trip were not exercised (the
+  simulator run set the folder through the environment); iCloud files that are
+  not yet downloaded rely on a file coordinator read, also untested.
+- The fullscreen/PiP behaviour on a real device, the
   headphone seek behaviour on a real device, an app icon, signing for distribution.
