@@ -1,0 +1,119 @@
+import Foundation
+import NetworkExtension
+import TVCore
+import TVVPN
+
+/// The system VPN's tunnel, used on iPhone and iPad. The in-process tunnel
+/// (swift/vpn/tunnel) is a userspace TCP stack, which some CDNs drop (BBC iPlayer);
+/// a packet tunnel hands WireGuard the real network stack's packets instead.
+///
+/// The app passes the WireGuard `.conf` text in the VPN configuration's
+/// `providerConfiguration["conf"]`: this process is sandboxed apart from the app
+/// and cannot read the iCloud folder the config came from.
+final class PacketTunnelProvider: NEPacketTunnelProvider {
+    override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        do {
+            guard let proto = protocolConfiguration as? NETunnelProviderProtocol,
+                  let text = proto.providerConfiguration?["conf"] as? String
+            else { throw Failure("the VPN configuration carries no WireGuard config") }
+            let conf = try WireGuardConf.parse(text)
+
+            // First, while the network is still the real one: resolving the endpoint's
+            // name after the settings below could be routed into a tunnel that is not up.
+            try Self.call { TVVPNTunnelPrepare(text, $0, $1) }
+
+            setTunnelNetworkSettings(Self.settings(for: conf)) { error in
+                if let error {
+                    return completionHandler(Failure("applying the network settings: \(error.localizedDescription)"))
+                }
+                do {
+                    try Self.call { TVVPNTunnelStart($0, $1) }
+                    completionHandler(nil)
+                } catch {
+                    completionHandler(error)
+                }
+            }
+        } catch {
+            completionHandler(error)
+        }
+    }
+
+    override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        TVVPNTunnelStop()
+        completionHandler()
+    }
+
+    /// Any message from the app is a request for the log: an extension has no console,
+    /// so this is how the app finds out what went wrong in here.
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        completionHandler?(Data(Self.log().utf8))
+    }
+
+    // MARK: network settings
+
+    /// What iOS must know before packets can flow: the tunnel's addresses, which
+    /// destinations go into it, and which DNS servers to ask.
+    static func settings(for conf: WireGuardConf) -> NEPacketTunnelNetworkSettings {
+        let s = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: conf.endpointHost ?? "127.0.0.1")
+
+        let v4 = conf.addresses.filter { !$0.isIPv6 }
+        if !v4.isEmpty {
+            let ip = NEIPv4Settings(addresses: v4.map(\.address), subnetMasks: v4.map(\.ipv4Mask))
+            ip.includedRoutes = conf.allowedIPs.filter { !$0.isIPv6 }.map {
+                $0.length == 0 ? NEIPv4Route.default() : NEIPv4Route(destinationAddress: $0.address, subnetMask: $0.ipv4Mask)
+            }
+            s.ipv4Settings = ip
+        }
+
+        // IPv6 only goes into the tunnel if the interface has an IPv6 address. A provider
+        // that gives only an IPv4 one while allowing ::/0 would leave IPv6 outside the VPN,
+        // where a geo-checked site sees the real address. So in that case give the
+        // interface a private one: IPv6 then enters the tunnel and goes nowhere, and
+        // apps fall back to IPv4.
+        let v6 = conf.addresses.filter(\.isIPv6)
+        let v6Routes = conf.allowedIPs.filter(\.isIPv6)
+        if !v6.isEmpty || !v6Routes.isEmpty {
+            let addresses = v6.isEmpty ? ["fd74:7676:6965:7700::2"] : v6.map(\.address)
+            let lengths = v6.isEmpty ? [NSNumber(value: 128)] : v6.map { NSNumber(value: $0.length) }
+            let ip = NEIPv6Settings(addresses: addresses, networkPrefixLengths: lengths)
+            ip.includedRoutes = v6Routes.map {
+                $0.length == 0 ? NEIPv6Route.default() : NEIPv6Route(destinationAddress: $0.address, networkPrefixLength: NSNumber(value: $0.length))
+            }
+            s.ipv6Settings = ip
+        }
+
+        if !conf.dns.isEmpty {
+            let dns = NEDNSSettings(servers: conf.dns)
+            dns.matchDomains = [""] // every name, not just ones under a search domain
+            s.dnsSettings = dns
+        }
+
+        s.mtu = NSNumber(value: conf.mtu ?? 1380)
+        return s
+    }
+
+    // MARK: the Go library
+
+    /// Calls one of the library's functions that report failure as -1 with a message.
+    private static func call(_ body: (UnsafeMutablePointer<CChar>, Int32) -> Int32) throws {
+        var message = [CChar](repeating: 0, count: 512)
+        let rc = message.withUnsafeMutableBufferPointer { body($0.baseAddress!, Int32($0.count)) }
+        if rc < 0 {
+            // With the last of the library's own log, which says what it was doing.
+            let recent = log().split(separator: "\n").suffix(4).joined(separator: "\n")
+            throw Failure(String(cString: message) + (recent.isEmpty ? "" : "\n" + recent))
+        }
+    }
+
+    private static func log() -> String {
+        var buf = [CChar](repeating: 0, count: 16 * 1024)
+        let n = buf.withUnsafeMutableBufferPointer { Int(TVVPNTunnelLog($0.baseAddress!, Int32($0.count))) }
+        return n > 0 ? String(cString: buf) : ""
+    }
+}
+
+struct Failure: Error, LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}

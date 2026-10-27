@@ -58,7 +58,9 @@ final class AppModel: ObservableObject {
         // A channel that needs a tunnel must not be fetched before there is one:
         // about:blank gives the status overlay a document to appear in, and keeps
         // the site from ever seeing the unrouted address.
-        if regionFor(current).isEmpty {
+        // With the system VPN, every launch goes through enter(): a VPN left up by an earlier
+        // run must be dropped (or kept) to match the channel before anything loads.
+        if regionFor(current).isEmpty && !VPNManager.usesSystemVPN {
             host.load(current)
         } else {
             host.load("about:blank")

@@ -90,6 +90,11 @@ targets:
       - package: TVCore
       - framework: build/TVVPN.xcframework
         embed: false
+      - target: TVView-Tunnel   # the system VPN's tunnel, embedded in PlugIns
+    entitlements:
+      path: App/iOS/TVView.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
     settings:
       base:
         PRODUCT_NAME: TV View
@@ -111,3 +116,35 @@ targets:
         # Documents shows up in Files, so channels.yaml can be edited there.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+
+  # The packet tunnel behind the iOS app's system VPN. Its bundle ID must be the app's plus a
+  # suffix, and it needs its own App ID with the Network Extensions capability (see
+  # PROVISIONING.md). Device only: the simulator cannot run a packet tunnel.
+  TVView-Tunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - App/Tunnel
+    dependencies:
+      - package: TVCore
+      - framework: build/TVVPN.xcframework
+        embed: false
+    entitlements:
+      path: App/Tunnel/TVViewTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+    settings:
+      base:
+        PRODUCT_NAME: TVViewTunnel
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.raff.tvview.swift.tunnel
+        OTHER_LDFLAGS: "-lresolv -framework CoreFoundation -framework Security"
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TV View Tunnel
+    info:
+      path: App/Tunnel/Info.plist
+      properties:
+        CFBundleDisplayName: TV View Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider

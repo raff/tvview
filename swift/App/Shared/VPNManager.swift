@@ -19,9 +19,26 @@ final class VPNManager {
     /// The region the web view is pointed at, "" for none.
     private(set) var current = ""
 
+    /// On an iPhone or iPad the tunnel is the system VPN (a packet tunnel extension): it uses
+    /// the real network stack, which the CDNs that drop a userspace one accept, at the price of
+    /// being device-wide while it is up. The simulator cannot run a packet tunnel, and macOS
+    /// has vpnhelper, so both keep their own tunnels.
+    #if os(iOS) && !targetEnvironment(simulator)
+    static let usesSystemVPN = true
+    private let system = SystemTunnel()
+    #else
+    static let usesSystemVPN = false
+    #endif
+
     /// Makes `region` the one the web view uses, starting its tunnel on first use.
     /// An empty region clears the proxy and leaves every tunnel up.
     func ensure(_ region: String, config: Config, store: WKWebsiteDataStore) async throws {
+        #if os(iOS) && !targetEnvironment(simulator)
+        // Not short-circuited on `current`: the VPN may have been left up by an earlier
+        // run, and what matters is what the system says.
+        try await ensureSystem(region, config: config, store: store)
+        return
+        #else
         if region == current { return }
 
         if region.isEmpty {
@@ -36,7 +53,26 @@ final class VPNManager {
         }
         store.proxyConfigurations = [ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: p))]
         current = region
+        #endif
     }
+
+    #if os(iOS) && !targetEnvironment(simulator)
+    private func ensureSystem(_ region: String, config: Config, store: WKWebsiteDataStore) async throws {
+        store.proxyConfigurations = [] // a proxy from the in-process tunnel must never linger
+        if region.isEmpty {
+            await system.disconnect()
+            current = ""
+            return
+        }
+        let path = try configPath(for: region, config: config)
+        Self.materialize(path)
+        guard let conf = try? String(contentsOfFile: path, encoding: .utf8) else {
+            throw VPNError("could not read the WireGuard file for \(region) at \(path)")
+        }
+        try await system.connect(region: region, conf: conf)
+        current = region
+    }
+    #endif
 
     /// Tunnels being started, so a second request for the same region (a double
     /// tap) waits for the first instead of starting another.
@@ -53,6 +89,18 @@ final class VPNManager {
     private static let startTimeout = 20.0
     #endif
 
+    /// The `.conf` for `region`, or the reason there is none (the same words on every platform).
+    private func configPath(for region: String, config: Config) throws -> String {
+        guard let vpn = config.vpn else { throw VPNError("no vpn block in the config") }
+        guard let path = vpn.tunnels[region] else {
+            if let want = vpn.pending[region] {
+                throw VPNError("no WireGuard file for \(region) yet: add \(want)")
+            }
+            throw VPNError("no wireguard config for region \"\(region)\"")
+        }
+        return path
+    }
+
     private func tunnel(for region: String, config: Config) async throws -> Int32 {
         if let port = ports[region] { return port }
 
@@ -60,13 +108,7 @@ final class VPNManager {
         if let running = starting[region] {
             start = running
         } else {
-            guard let vpn = config.vpn else { throw VPNError("no vpn block in the config") }
-            guard let path = vpn.tunnels[region] else {
-                if let want = vpn.pending[region] {
-                    throw VPNError("no WireGuard file for \(region) yet: add \(want)")
-                }
-                throw VPNError("no wireguard config for region \"\(region)\"")
-            }
+            let path = try configPath(for: region, config: config)
 
             // Bringing the device up can take a moment: not on the main thread.
             start = Task.detached {
