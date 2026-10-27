@@ -137,6 +137,11 @@ final class AppModel: ObservableObject {
 
     /// The page finished loading: take down a stall message if one was showing.
     func pageFinished() {
+        // A status sent while the page was being replaced can be lost; say it again now that
+        // there is a page to show it.
+        if let st = vpnSt, !stallHint {
+            host.run("window.wvVPN && window.wvVPN(\(WebHost.json(st)));")
+        }
         guard stallHint else { return }
         stallHint = false
         showVPN("done", "")

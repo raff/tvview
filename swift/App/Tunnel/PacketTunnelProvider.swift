@@ -1,5 +1,6 @@
 import Foundation
 import NetworkExtension
+import os
 import TVCore
 import TVVPN
 
@@ -12,41 +13,84 @@ import TVVPN
 /// and cannot read the iCloud folder the config came from.
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
+        Self.note("startTunnel")
         do {
             guard let proto = protocolConfiguration as? NETunnelProviderProtocol,
                   let text = proto.providerConfiguration?["conf"] as? String
             else { throw Failure("the VPN configuration carries no WireGuard config") }
+            Self.note("parsing the config (\(text.utf8.count) bytes)")
             let conf = try WireGuardConf.parse(text)
+            Self.note("config parsed: \(conf.addresses.count) address(es), \(conf.dns.count) dns, \(conf.allowedIPs.count) route(s), endpoint \(conf.endpointHost ?? "?")")
 
             // First, while the network is still the real one: resolving the endpoint's
             // name after the settings below could be routed into a tunnel that is not up.
+            Self.note("calling TVVPNTunnelPrepare")
             try Self.call { TVVPNTunnelPrepare(text, $0, $1) }
+            Self.note("endpoint resolved")
 
-            setTunnelNetworkSettings(Self.settings(for: conf)) { error in
+            setTunnelNetworkSettings(Self.settings(for: conf)) { [weak self] error in
                 if let error {
-                    return completionHandler(Failure("applying the network settings: \(error.localizedDescription)"))
+                    self?.fail(Failure("applying the network settings: \(error.localizedDescription)"), completionHandler)
+                    return
                 }
+                Self.note("network settings applied")
                 do {
+                    Self.note("calling TVVPNTunnelStart")
                     try Self.call { TVVPNTunnelStart($0, $1) }
+                    Self.note("wireguard started")
                     completionHandler(nil)
                 } catch {
-                    completionHandler(error)
+                    self?.fail(error, completionHandler)
                 }
             }
         } catch {
-            completionHandler(error)
+            fail(error, completionHandler)
         }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+        Self.note("stopTunnel (reason \(reason.rawValue))")
         TVVPNTunnelStop()
         completionHandler()
+    }
+
+    /// Reports a failed start. The process, and the log in it, goes away right after, and
+    /// iOS does not pass an error's text back to the app: so wait a moment, during which
+    /// the app (which asks for the log while it connects) can read why.
+    private func fail(_ error: Error, _ completionHandler: @escaping (Error?) -> Void) {
+        Self.note("FAILED: \(error.localizedDescription)")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2.5) { completionHandler(error) }
     }
 
     /// Any message from the app is a request for the log: an extension has no console,
     /// so this is how the app finds out what went wrong in here.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
-        completionHandler?(Data(Self.log().utf8))
+        completionHandler?(Data((Self.steps() + Self.log()).utf8))
+    }
+
+    // MARK: this file's own log
+
+    private static let notesLock = NSLock()
+    private nonisolated(unsafe) static var notes: [String] = []
+
+    /// A step this provider took. Kept apart from the Go library's log (which has
+    /// wireguard-go's own lines) and returned with it.
+    static func note(_ line: String) {
+        // Also the system log (public, or it reads <private>), for when this process dies
+        // before the app can ask: `log collect --device` then shows it.
+        Logger(subsystem: "io.github.raff.tvview.tunnel", category: "extension").notice("\(line, privacy: .public)")
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        notesLock.lock()
+        notes.append(f.string(from: Date()) + " " + line)
+        if notes.count > 60 { notes.removeFirst(notes.count - 60) }
+        notesLock.unlock()
+    }
+
+    private static func steps() -> String {
+        notesLock.lock()
+        defer { notesLock.unlock() }
+        return notes.joined(separator: "\n") + "\n"
     }
 
     // MARK: network settings

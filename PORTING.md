@@ -62,7 +62,8 @@ platforms get different tunnels, for different reasons.
   Network Extension would fight a company VPN that is up at the same time, and a
   userspace tunnel is dropped by BBC iPlayer's CDN.
 - **iOS/iPadOS** uses a `NEPacketTunnelProvider` (system VPN, device-wide while
-  connected), which is acceptable there and uses the real TCP stack, so BBC works.
+  connected), which is acceptable there and uses the real TCP stack, so BBC works. Built;
+  see `swift/README.md`.
 
 An in-process userspace tunnel (built, working) covers sites that do not mind it
 and is what runs today on both platforms.

@@ -110,6 +110,26 @@ struct ContentView: View {
 
 extension ContentView {
     var escapeBar: some View {
+        VStack(spacing: 10) {
+            // The error itself, here and not only in the page: the page's overlay can be
+            // out of date or gone, and the text is what says what to fix.
+            if let text = model.vpnSt?["text"], model.vpnSt?["state"] == "error", !model.host.unresponsive {
+                ScrollView {
+                    Text(text)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+            }
+            escapeButtons
+        }
+        .padding(10)
+        .frame(maxWidth: 560)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var escapeButtons: some View {
         HStack(spacing: 12) {
             if model.host.unresponsive {
                 Text("This page is not responding.").font(.footnote)
@@ -129,8 +149,6 @@ extension ContentView {
                     .buttonStyle(.bordered)
             }
         }
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

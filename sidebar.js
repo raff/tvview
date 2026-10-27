@@ -189,7 +189,8 @@
     "}",
     ".vpn.on { display: flex; }",
     ".vpn.err { border-color: rgba(255,120,110,0.6); color: #ffc2bc; }",
-    ".vpn .msg { overflow-wrap: anywhere; }",
+    // pre-wrap: an error can carry a few lines of a log, and the line breaks matter.
+    ".vpn .msg { overflow-wrap: anywhere; white-space: pre-wrap; }",
     ".spin {",
     "  width: 24px; height: 24px; flex: none; border-radius: 50%;",
     "  border: 3px solid rgba(255,255,255,0.28); border-top-color: #6aa8ff;",

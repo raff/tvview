@@ -57,9 +57,35 @@ final class SystemTunnel {
             throw TunnelError("could not start the VPN: \(error.localizedDescription)")
         }
 
-        let status = await wait(for: [.connected, .disconnected, .invalid], on: m, timeout: 30)
-        if status == .connected { return }
-        throw TunnelError(await failureText(m, timedOut: status != .disconnected && status != .invalid))
+        // Wait for it to come up. Right after startVPNTunnel() the status still reads
+        // "disconnected" for a moment, before it moves to "connecting": that is not a
+        // failure (it was taken for one, and the VPN then connected anyway). "Disconnected"
+        // only counts once the connection has been seen to start, or has not started at all
+        // after a few seconds.
+        //
+        // Meanwhile keep asking the extension for its log: when it does fail, the process and
+        // the log go with it, and this is the last thing it said.
+        var lastLog = ""
+        var sawStart = false
+        let began = Date()
+        let deadline = began.addingTimeInterval(30)
+        var failed = false
+        while Date() < deadline {
+            switch m.connection.status {
+            case .connected:
+                return
+            case .connecting, .reasserting, .disconnecting:
+                sawStart = true
+            case .disconnected, .invalid:
+                if sawStart || Date().timeIntervalSince(began) > 5 { failed = true }
+            @unknown default:
+                break
+            }
+            if failed { break }
+            if let log = await extensionLog(m, timeout: 1), !log.isEmpty { lastLog = log }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
+        throw TunnelError(await failureText(m, timedOut: !failed, lastLog: lastLog))
     }
 
     /// Turns the VPN off, if it is on.
@@ -95,7 +121,7 @@ final class SystemTunnel {
 
     /// What to tell the person when the VPN did not come up: the system's reason if it
     /// gave one, and the extension's own log if it is still there to ask.
-    private func failureText(_ m: NETunnelProviderManager, timedOut: Bool) async -> String {
+    private func failureText(_ m: NETunnelProviderManager, timedOut: Bool, lastLog: String) async -> String {
         var parts: [String] = []
         if timedOut {
             parts.append("The VPN did not connect within 30 s.")
@@ -104,10 +130,14 @@ final class SystemTunnel {
             parts.append("The VPN stopped while connecting.")
         }
         if let reason = await lastDisconnectError(m) { parts.append(reason) }
-        if let log = await extensionLog(m), !log.isEmpty {
-            parts.append("Tunnel log:\n" + log.split(separator: "\n").suffix(6).joined(separator: "\n"))
+        var log = lastLog
+        if log.isEmpty, let late = await extensionLog(m, timeout: 1) { log = late }
+        if log.isEmpty {
+            parts.append("The tunnel extension never reported anything, so it probably did not start.")
+        } else {
+            parts.append("Tunnel log:\n" + log.split(separator: "\n").suffix(12).joined(separator: "\n"))
         }
-        return parts.joined(separator: " ")
+        return parts.joined(separator: "\n")
     }
 
     private func lastDisconnectError(_ m: NETunnelProviderManager) async -> String? {
@@ -115,19 +145,27 @@ final class SystemTunnel {
             try await m.connection.fetchLastDisconnectError()
             return nil
         } catch {
-            return error.localizedDescription
+            let e = error as NSError
+            return "\(error.localizedDescription) (\(e.domain) \(e.code))"
         }
     }
 
-    private func extensionLog(_ m: NETunnelProviderManager) async -> String? {
+    /// The extension's log, or nil if it does not answer within `timeout`: an extension that is
+    /// not running never replies, and must not hold the caller up.
+    private func extensionLog(_ m: NETunnelProviderManager, timeout: TimeInterval) async -> String? {
         guard let session = m.connection as? NETunnelProviderSession else { return nil }
         return await withCheckedContinuation { cont in
+            let once = OnceFlag()
             do {
                 try session.sendProviderMessage(Data([0])) { data in
-                    cont.resume(returning: data.flatMap { String(data: $0, encoding: .utf8) })
+                    if once.claim() { cont.resume(returning: data.flatMap { String(data: $0, encoding: .utf8) }) }
                 }
             } catch {
-                cont.resume(returning: nil)
+                if once.claim() { cont.resume(returning: nil) }
+                return
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                if once.claim() { cont.resume(returning: nil) }
             }
         }
     }
@@ -139,6 +177,19 @@ final class SystemTunnel {
             return "iOS did not allow TV View to add a VPN configuration. Choose Allow when it asks, then try the channel again."
         }
         return "could not save the VPN configuration: \(error.localizedDescription)"
+    }
+}
+
+/// Lets exactly one of two racing callbacks resume a continuation.
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if claimed { return false }
+        claimed = true
+        return true
     }
 }
 

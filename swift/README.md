@@ -100,63 +100,72 @@ live channels played, on-demand did not, through the userspace tunnel). The page
 BBC iPlayer and RaiPlay's front page all load; playback of on-demand video through
 the kernel tunnel has not been tried.
 
-### iOS/iPadOS: today an in-process tunnel; next a Network Extension
+### iOS/iPadOS: the system VPN (done; the full login-and-play flow is not yet checked)
 
-Today (built, working on a phone): the same `swift/vpn` library, built for iOS, runs
-the tunnel **in-process** as a userspace WireGuard device with a local SOCKS5 proxy
-(`swift/vpn/tunnel`, the code the Go app used before kernel interfaces), packaged
-as `swift/build/TVVPN.xcframework` by `make swift-vpn` (`swift/vpn/build.sh`; `make
-swift-mac`/`swift-ios` build it if missing). `VPNManager` starts a region's tunnel
-the first time a channel needs it (20 s limit on iOS, one start per region) and points
-the web view's data store at the proxy; nothing else on the device is routed. The
-status overlay, `[VPN IT]` title, the 25 s "page may be blocked" message and the
-"add IT.conf to ..." message for pending files work as in the Go app, and a native
-bar (channel menu + Dismiss) appears whenever the overlay shows an error, so a stuck
-page can always be left. A tunnel file written as
-`~/Library/Mobile Documents/.../IT.conf` is found by name in the `wireguard/` folder
-beside the config when that path does not exist (iOS, where `~` is the app's
-sandbox). `go run ./swift/vpn/cmd/tvvpncheck file.conf [url]` brings a config up
-in-process and fetches a URL through it (UK exits in London, IT in Milan).
+On a **device**, a region channel connects a **system VPN**: `TVView-Tunnel`
+(`App/Tunnel`) is a `NEPacketTunnelProvider` app extension, with its own App ID
+(`io.github.raff.tvview.swift.tunnel`, see `../PROVISIONING.md` for the portal steps) and
+the packet-tunnel Network Extensions entitlement on both the extension and the app.
+Because it hands WireGuard the real network stack's packets, the CDNs that drop a
+userspace TCP stack (BBC iPlayer) accept it: the BBC and RaiPlay pages load past the
+region check on a phone, and Settings shows the VPN connected when a region channel is open.
 
-**Known limit of that tunnel:** some CDNs drop a userspace TCP stack. BBC iPlayer
-through the UK tunnel: `www.bbc.co.uk` answers in about a second, but
-`static.files.bbci.co.uk` and `ichef.bbci.co.uk` (its scripts, styles, images) never
-do (`tvvpncheck UK.conf https://static.files.bbci.co.uk/` times out), so the page
-never finishes. RaiPlay's front page works, checked on a phone.
+How it fits together:
+- `SystemTunnel` (`App/iOS`) owns one VPN configuration, "TV View": it saves it with the
+  WireGuard `.conf` **text** in `providerConfiguration` (the extension is sandboxed apart
+  from the app and cannot read the iCloud folder), starts it, waits for "connected" (30 s)
+  and says why it did not. One tunnel at a time: a different region replaces the running
+  one; a channel with no region turns it off. `VPNManager` picks it on a device
+  (`usesSystemVPN`); the simulator keeps the in-process tunnel (it cannot run a packet
+  tunnel) and macOS keeps `vpnhelper`.
+- The extension (`PacketTunnelProvider`): parses the `.conf` (`TVCore.WireGuardConf`: addresses,
+  DNS, MTU, endpoint, routes), calls `TVVPNTunnelPrepare` (Go: parse and resolve the endpoint
+  *before* any settings are applied), applies `NEPacketTunnelNetworkSettings`, then
+  `TVVPNTunnelStart` (Go: finds the utun descriptor, `wireguard-go` on it). IPv4-only providers
+  that allow `::/0` get a private IPv6 address on the interface, so IPv6 enters the tunnel and
+  fails fast instead of leaking around it.
+- Debugging an extension has no console: the extension keeps a step log (its own `note()`
+  lines plus the Go library's ring buffer) and the app asks for it by provider message while
+  connecting, appending the last lines to any failure. The steps also go to the system
+  log (subsystem `io.github.raff.tvview.tunnel`; reading a phone's log from the Mac needs
+  `sudo log collect --device`).
 
-**Decided:** a global VPN while the app is in use is fine on iOS, so BBC (and
-on-demand RaiPlay, if it needs it) gets a Network Extension, built into the app.
+Behaviour to know:
+- **Device-wide while it is up.** Everything on the phone goes through it, not only this app.
+  Switching to a channel with no region turns it off, but quitting the app leaves it up. The
+  app hides the status bar, so look in Settings (or Control Center) for the VPN, not the
+  status-bar badge. An in-app indicator and a disconnect button would be the next addition.
+- The first connect shows iOS's "Add VPN Configurations" prompt (Allow, then the passcode).
+- The provider's own error text is **not** passed back to the app by iOS; only a generic
+  reason is (hence the log by message).
+- The WireGuard config, private key included, is stored in the VPN configuration
+  (`providerConfiguration`) on the phone, not in the Keychain.
+
+**A bug worth remembering:** right after `startVPNTunnel()` the status still reads
+"disconnected" for a moment before it becomes "connecting". A loop that took that for a
+failure reported "The VPN stopped while connecting" while the tunnel was in fact coming up
+(Reset page then worked). The wait now treats "disconnected" as a failure only after the
+connection has been seen to start, or after 5 s of nothing.
+
+**Identity trap:** the app first installed on the phone was signed under the old wildcard
+profile (App ID prefix `7A5LQN42Z7`); the explicit App ID the extension needs has the team
+prefix `EDG4R37566`. iOS refuses to upgrade across that, so the old app had to be deleted
+(its logins and folder choice with it). That is a one-time cost, now paid.
+
+The in-process tunnel (`swift/vpn/tunnel`, `TVVPNStart`, the SOCKS5 proxy) is still built, for
+the simulator and for `go run ./swift/vpn/cmd/tvvpncheck file.conf [url]`, which brings a
+config up and fetches a URL (UK exits in London, IT in Milan). Its known limit: BBC's CDN
+(`static.files.bbci.co.uk`, `ichef.bbci.co.uk`) never answers a userspace stack.
 
 ### Next, in order
 
-1. **Check the sidebar fix on the phone** (commit `31883b1`): BBC iPlayer used to squash
-   the sidebar into a sliver; Amazon and PBS must still look right. The page logs
-   `viewport scaled/plain ...` (see the log recipe below). Also install the current
-   build on the phone (it has not been reinstalled since the macOS work; the iOS
-   behaviour is unchanged).
-2. ~~Try RaiPlay movies and series on the Mac.~~ Checked: one movie fails the same way in
-   the pre-Swift Go app (commit `65510a6`), so it is the show or RaiPlay, not the tunnel.
-   Other on-demand titles were not exhaustively tried.
-3. **iOS: Network Extension.**
-   - Portal: App ID `io.github.raff.tvview.swift.tunnel` with the Network Extensions
-     capability, and the same capability on the app's ID (`io.github.raff.tvview.swift`,
-     already registered). Xcode's automatic signing (`-allowProvisioningUpdates`, team
-     `EDG4R37566`) can enable it.
-   - New target `TVView-Tunnel`: an app extension whose principal class is a
-     `NEPacketTunnelProvider`, entitlement `com.apple.developer.networking.networkextension`
-     = `packet-tunnel-provider` on both app and extension, embedded in the iOS app. Not
-     testable in the simulator; needs a device.
-   - The Go library gets a second entry point that runs wireguard-go on the extension's
-     tunnel file descriptor (as WireGuardKit does) instead of making a netstack; Swift
-     builds `NEPacketTunnelNetworkSettings` (addresses, DNS, MTU, routes) from the
-     `.conf` (`wireproxy.CreateIPCRequest` in `internal/kernelvpn` already parses the
-     fields it needs; TVCore parses the file's structure).
-   - App side: `NETunnelProviderManager` to save, load, start and stop; a channel with a
-     region turns the right tunnel on and waits for `.connected` (one tunnel at a time, so
-     a region switch reconfigures); the same overlay messages; a clear message when the
-     user declines the one-time "add VPN configuration" prompt.
-   - Decide then whether iOS keeps the in-process tunnel as a fallback.
-4. Smaller items under *Status*.
+1. **The real workflow on the phone:** log in to BBC iPlayer and RaiPlay and play something
+   through the system VPN (BBC also asks about a TV licence). Only the page load and a Rai
+   preview have been seen so far. Look for the tunnel's behaviour on Wi-Fi/cellular changes
+   and when the app goes to the background while audio plays.
+2. **An in-app VPN indicator and "Disconnect VPN"** (the VPN outlives the app).
+3. The Mac, `-config`/`-debug` flags, notarization and the other parity gaps under *macOS
+   parity* and *Status*.
 
 ### A frozen page (done in the Swift app; not yet in the Go app)
 
