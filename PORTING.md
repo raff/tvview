@@ -102,12 +102,12 @@ to each app install. There is no built-in sync. Options, most to least robust:
    config (the same way `hide.js` already takes per-channel selectors) fill and
    submit the form. Log in once per machine automatically. Fragile per site:
    selectors change, MFA and captchas break it.
-2. **Safari/Passwords AutoFill inside the webview.** Unverified, and probably
-   not available: in `WKWebView`, AutoFill of saved passwords generally needs
-   the site's domain to be associated with the app (Associated Domains +
-   the site's `apple-app-site-association`), which we can't get for third-party
-   sites. Needs a quick experiment before relying on it. Third-party password
-   manager extensions work in Safari / `SFSafariViewController`, not here.
+2. **Safari/Passwords AutoFill inside the webview.** *Tried on a phone: it works.*
+   The key icon above the keyboard lists saved logins and fills them, from iCloud
+   Passwords and from an enabled third-party manager, without the Associated Domains
+   association that automatic suggestions would need. Only what is in iCloud Passwords
+   (or the manager) is offered, so passwords kept in Chrome have to be imported first
+   (Safari > File > Import From > Google Chrome). See `swift/README.md`.
 3. **Sync the session itself** (export cookies via `WKHTTPCookieStore`,
    store in Keychain, `setCookie` on the other machine). Appealing because no
    password is handled, but: session-only cookies have no expiry and may not
@@ -119,8 +119,8 @@ to each app install. There is no built-in sync. Options, most to least robust:
    free, but we lose script injection, the sidebar and per-channel hiding,
    which is the app. Not viable as the main view.
 
-Recommendation: do (1), and run the small experiment for (2) first since it
-would make (1) unnecessary where it works.
+Outcome: (2) is enough, so (1) was not built; (3) stays an unbuilt option for
+sites that still need a fresh login on every device.
 
 ### Other notes
 

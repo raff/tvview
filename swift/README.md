@@ -104,7 +104,7 @@ the kernel tunnel has not been tried.
 
 On a **device**, a region channel connects a **system VPN**: `TVView-Tunnel`
 (`App/Tunnel`) is a `NEPacketTunnelProvider` app extension, with its own App ID
-(`io.github.raff.tvview.swift.tunnel`, see `../PROVISIONING.md` for the portal steps) and
+(`io.github.raff.tvview.swift.tunnel`; see *One-time Apple Developer setup* below) and
 the packet-tunnel Network Extensions entitlement on both the extension and the app.
 Because it hands WireGuard the real network stack's packets, the CDNs that drop a
 userspace TCP stack (BBC iPlayer) accept it: the BBC and RaiPlay pages load past the
@@ -174,6 +174,41 @@ config up and fetches a URL (UK exits in London, IT in Milan). Its known limit: 
    but nothing in the app says it is up).
 3. The Mac, `-config`/`-debug` flags, notarization and the other parity gaps under *macOS
    parity* and *Status*.
+
+### One-time Apple Developer setup (for the iOS system VPN)
+
+At developer.apple.com > Certificates, Identifiers & Profiles > Identifiers, signed in to the
+team (`EDG4R37566`):
+1. Open the App ID `io.github.raff.tvview.swift` and tick **Network Extensions** under
+   Capabilities, then Save.
+2. Register a second explicit App ID, `io.github.raff.tvview.swift.tunnel` ("TV View Tunnel"),
+   with **Network Extensions** ticked. The extension's bundle ID must be the app's plus a suffix.
+3. Profiles need no manual work: building with `-allowProvisioningUpdates` makes Xcode create
+   one per App ID (it showed `iOS Team Provisioning Profile: io.github.raff.tvview.swift` and
+   `...swift.tunnel`). The old wildcard profile cannot carry the entitlement, which is why
+   both IDs have to be explicit.
+4. The Apple Developer Program License Agreement must be accepted (Account > Agreements), or
+   profile generation fails unhelpfully. The Mac needs none of this (it uses `vpnhelper`).
+
+A packet tunnel is available to a paid team through that checkbox; no request to Apple was
+needed. Apple's App Store rules say VPN apps must come from an organization account, which
+does not matter for installing from Xcode on your own devices but could for TestFlight or the
+App Store from an individual account (check the current guidelines before relying on either).
+
+### Logging in to sites on the phone
+
+Typing passwords on a phone is the annoying part. What works, as tried:
+- **iOS Password AutoFill works inside the web view.** Tapping a password field shows the
+  key icon / Passwords suggestion above the keyboard and fills from iCloud Passwords (and from
+  a third-party manager enabled under Settings > General > AutoFill & Passwords).
+- Logins kept only in Chrome are not in iCloud Passwords. On the Mac, **Safari > File > Import
+  From > Google Chrome… > Passwords** moves them there, and they sync to the phone.
+- A Bitwarden that asks to log in again on every request needs a longer *Vault timeout* and the
+  action set to *Lock* (not *Log out*); that is its setting, not the app's.
+- **iPhone Mirroring** lets you type with the Mac keyboard, but a password copied from a manager
+  usually does not cross the clipboard (password managers mark it local-only).
+- Sessions (cookies) are not shared between devices; see *Site logins* in `../PORTING.md` for why
+  copying them is the weakest option.
 
 ### A frozen page (done in the Swift app; not yet in the Go app)
 

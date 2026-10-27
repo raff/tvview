@@ -119,7 +119,7 @@ targets:
 
   # The packet tunnel behind the iOS app's system VPN. Its bundle ID must be the app's plus a
   # suffix, and it needs its own App ID with the Network Extensions capability (see
-  # PROVISIONING.md). Device only: the simulator cannot run a packet tunnel.
+  # swift/README.md, "One-time Apple Developer setup"). Device only: the simulator cannot run a packet tunnel.
   TVView-Tunnel:
     type: app-extension
     platform: iOS
