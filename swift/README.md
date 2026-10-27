@@ -178,6 +178,23 @@ config up and fetches a URL (UK exits in London, IT in Milan). Its known limit: 
 3. The Mac, `-config`/`-debug` flags, notarization and the other parity gaps under *macOS
    parity* and *Status*.
 
+### Putting a build on a phone or iPad
+
+`scripts/ios-device.sh` (or the `ios-*` Makefile targets) does it from the command line:
+
+```
+scripts/ios-device.sh list                 # devices this Mac knows (make ios-devices)
+scripts/ios-device.sh run -d iPad          # build for it, install, launch (make ios-device-run DEVICE=iPad)
+scripts/ios-device.sh build|install|launch|logs|uninstall [-d DEVICE]
+```
+
+`-d` takes a name, a fragment of one, or the identifier; with a single device it can be left out.
+`logs` launches the app with its log in the terminal. Build *for* the device the first time
+(`run -d`/`build -d`): that is what registers a new iPad with the developer account and adds it to the
+provisioning profile. The device needs Developer Mode on, to be unlocked, and to trust this Mac; installing
+closes the app there, and an iPad installs the same app (it is universal), keeping its own logins.
+The iPad also needs its own one-time VPN permission and iCloud sign-in, like the phone did.
+
 ### One-time Apple Developer setup (for the iOS system VPN)
 
 At developer.apple.com > Certificates, Identifiers & Profiles > Identifiers, signed in to the

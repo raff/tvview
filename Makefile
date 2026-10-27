@@ -22,7 +22,7 @@ VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 
 LDFLAGS := -s -w
 
-.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-vpn swift-test swift-mac swift-ios swift-run swift-release swift-install swift-clean
+.PHONY: all build app universal run install install-vpn-helper uninstall-vpn-helper config diff-config edit-config clean test swift-gen swift-vpn swift-test swift-mac swift-ios swift-run swift-release swift-install swift-clean ios-devices ios-device-build ios-install ios-device-run ios-logs
 
 all: build
 
@@ -166,6 +166,23 @@ swift-mac: swift-gen
 ## set in swift/project.yml.
 swift-ios: swift-gen
 	$(XCODEBUILD) -scheme TVView-iOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
+## ios-devices / ios-device-run / ios-install / ios-logs: build and install on a real iPhone
+## or iPad (scripts/ios-device.sh has more: DEVICE=iPad picks one, `scripts/ios-device.sh help`).
+ios-devices:
+	scripts/ios-device.sh list
+
+ios-device-build:
+	scripts/ios-device.sh build $(if $(DEVICE),-d "$(DEVICE)")
+
+ios-install:
+	scripts/ios-device.sh install $(if $(DEVICE),-d "$(DEVICE)")
+
+ios-device-run:
+	scripts/ios-device.sh run $(if $(DEVICE),-d "$(DEVICE)")
+
+ios-logs:
+	scripts/ios-device.sh logs $(if $(DEVICE),-d "$(DEVICE)")
 
 swift-run: swift-mac
 	open "$(SWIFT_DIR)/build/Build/Products/Debug/TV View.app"
