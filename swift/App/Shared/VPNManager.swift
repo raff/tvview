@@ -57,6 +57,15 @@ final class VPNManager {
     }
 
     #if os(iOS) && !targetEnvironment(simulator)
+    /// Whether the system VPN is up for `region` right now (it may have dropped while this app
+    /// was in the background: the extension stops it when the app has been silent too long).
+    func systemVPNIsUp(for region: String) async -> Bool {
+        await system.activeRegion() == region
+    }
+
+    /// For the app being terminated: stop the VPN without waiting.
+    func stopSystemVPNNow() { system.stopNow() }
+
     private func ensureSystem(_ region: String, config: Config, store: WKWebsiteDataStore) async throws {
         store.proxyConfigurations = [] // a proxy from the in-process tunnel must never linger
         if region.isEmpty {

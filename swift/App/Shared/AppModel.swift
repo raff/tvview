@@ -54,6 +54,17 @@ final class AppModel: ObservableObject {
         // The web view can be replaced, and the views showing it follow this model.
         hostChanges = host.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         host.startWatchdog()
+        #if os(iOS) && !targetEnvironment(simulator)
+        // The system VPN belongs to iOS, not to this app, so see to it ourselves: drop it when
+        // the app is terminated, and bring it back when the app returns after the extension
+        // gave it up (it does after a minute without hearing from us).
+        NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.vpn.stopSystemVPNNow() }
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.resumeVPN() }
+        }
+        #endif
         host.install(config: loaded)
         // A channel that needs a tunnel must not be fetched before there is one:
         // about:blank gives the status overlay a document to appear in, and keeps
@@ -146,6 +157,19 @@ final class AppModel: ObservableObject {
         stallHint = false
         showVPN("done", "")
     }
+
+    #if os(iOS) && !targetEnvironment(simulator)
+    /// Back in front: if this channel needs a VPN and it has dropped, bring it back and reload.
+    private func resumeVPN() {
+        guard VPNManager.usesSystemVPN else { return }
+        let url = current, region = regionFor(url)
+        guard !region.isEmpty else { return }
+        Task { [weak self] in
+            guard let self, await !self.vpn.systemVPNIsUp(for: region) else { return }
+            await self.enter(url)
+        }
+    }
+    #endif
 
     /// Takes the status message down, for the native bar's Dismiss button.
     func dismissStatus() {

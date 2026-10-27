@@ -25,7 +25,42 @@ final class SystemTunnel {
 
     /// Brings the VPN up with `conf` (the WireGuard config text) for `region`, and returns
     /// once it is connected. One tunnel at a time: a different region replaces the running one.
+    /// From then on a heartbeat tells the extension this app is still here; see stopNow().
     func connect(region: String, conf: String) async throws {
+        try await connectOnce(region: region, conf: conf)
+        startHeartbeat()
+    }
+
+    private var heartbeat: Task<Void, Never>?
+
+    /// Every 15 s while this process is running, one byte to the extension. The extension
+    /// stops the tunnel after a minute without it, so the VPN cannot outlive a killed or
+    /// suspended app (iOS gives an app no reliable "I am being quit" moment).
+    private func startHeartbeat() {
+        heartbeat?.cancel()
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.beat()
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+            }
+        }
+    }
+
+    private func beat() {
+        guard let m = manager, m.connection.status == .connected,
+              let session = m.connection as? NETunnelProviderSession else { return }
+        try? session.sendProviderMessage(Data([1])) { _ in }
+    }
+
+    /// Best effort, for the app being terminated while it can still act: ask the VPN to stop
+    /// now, without waiting for the answer. (If the app is killed without notice, the
+    /// extension's missing heartbeat does the same a minute later.)
+    func stopNow() {
+        heartbeat?.cancel()
+        manager?.connection.stopVPNTunnel()
+    }
+
+    private func connectOnce(region: String, conf: String) async throws {
         let m = try await loadManager(create: true)!
 
         if m.connection.status == .connected, await activeRegion() == region { return }
@@ -90,6 +125,7 @@ final class SystemTunnel {
 
     /// Turns the VPN off, if it is on.
     func disconnect() async {
+        heartbeat?.cancel()
         guard let m = try? await loadManager(create: false) else { return }
         if [.disconnected, .invalid].contains(m.connection.status) { return }
         NSLog("tvview: stopping the system VPN")

@@ -132,9 +132,16 @@ How it fits together:
 
 Behaviour to know:
 - **Device-wide while it is up.** Everything on the phone goes through it, not only this app.
-  Switching to a channel with no region turns it off, but quitting the app leaves it up. The
-  app hides the status bar, so look in Settings (or Control Center) for the VPN, not the
-  status-bar badge. An in-app indicator and a disconnect button would be the next addition.
+  Switching to a channel with no region turns it off. The app hides the status bar, so look in
+  Settings (or Control Center) for the VPN, not the status-bar badge.
+- **It does not outlive the app.** iOS gives an app no reliable "being quit" moment (a swiped
+  or killed app is usually suspended and told nothing), and the system VPN belongs to iOS. So
+  the app sends the extension a one-byte heartbeat every 15 s while its process runs, and the
+  extension stops the tunnel after 60 s of silence (the dead man's switch in
+  `PacketTunnelProvider`). A killed, crashed or suspended app therefore drops the VPN within
+  about a minute; a brief trip to another app does not. `willTerminate` also stops it at once
+  when the app gets to see it. Coming back to the app after the VPN dropped reconnects it and
+  reloads the page. Audio playing in the background keeps the app (and so the heartbeat) alive.
 - The first connect shows iOS's "Add VPN Configurations" prompt (Allow, then the passcode).
 - The provider's own error text is **not** passed back to the app by iOS; only a generic
   reason is (hence the log by message).
@@ -163,7 +170,8 @@ config up and fetches a URL (UK exits in London, IT in Milan). Its known limit: 
    through the system VPN (BBC also asks about a TV licence). Only the page load and a Rai
    preview have been seen so far. Look for the tunnel's behaviour on Wi-Fi/cellular changes
    and when the app goes to the background while audio plays.
-2. **An in-app VPN indicator and "Disconnect VPN"** (the VPN outlives the app).
+2. **An in-app VPN indicator and a "Disconnect VPN" button** (the VPN no longer outlives the app,
+   but nothing in the app says it is up).
 3. The Mac, `-config`/`-debug` flags, notarization and the other parity gaps under *macOS
    parity* and *Status*.
 

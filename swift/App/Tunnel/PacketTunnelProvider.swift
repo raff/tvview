@@ -38,6 +38,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     Self.note("calling TVVPNTunnelStart")
                     try Self.call { TVVPNTunnelStart($0, $1) }
                     Self.note("wireguard started")
+                    self?.startDeadMansSwitch()
                     completionHandler(nil)
                 } catch {
                     self?.fail(error, completionHandler)
@@ -50,8 +51,45 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         Self.note("stopTunnel (reason \(reason.rawValue))")
+        switchTimer?.cancel()
         TVVPNTunnelStop()
         completionHandler()
+    }
+
+    // MARK: the dead man's switch
+
+    // iOS tells an app nothing when it is swiped away or killed, and a system VPN outlives
+    // the app that started it. So the app says it is alive every few seconds, and this stops
+    // the tunnel when it has not for a minute: a killed, crashed or suspended app takes the
+    // VPN with it, and a brief trip to another app does not.
+    private static let silenceLimit: TimeInterval = 60
+    private var switchTimer: DispatchSourceTimer?
+    private let beatLock = NSLock()
+    private var lastBeat = Date()
+
+    private func startDeadMansSwitch() {
+        beat()
+        let timer = DispatchSource.makeTimerSource(queue: .global())
+        timer.schedule(deadline: .now() + 10, repeating: 10)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.beatLock.lock()
+            let silent = Date().timeIntervalSince(self.lastBeat)
+            self.beatLock.unlock()
+            if silent > Self.silenceLimit {
+                Self.note("the app has been silent for \(Int(silent)) s: stopping the VPN")
+                self.switchTimer?.cancel()
+                self.cancelTunnelWithError(nil)
+            }
+        }
+        switchTimer = timer
+        timer.resume()
+    }
+
+    private func beat() {
+        beatLock.lock()
+        lastBeat = Date()
+        beatLock.unlock()
     }
 
     /// Reports a failed start. The process, and the log in it, goes away right after, and
@@ -64,7 +102,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     /// Any message from the app is a request for the log: an extension has no console,
     /// so this is how the app finds out what went wrong in here.
+    /// Two messages from the app: a single byte 1 is a heartbeat, anything else asks for the log.
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
+        if messageData == Data([1]) {
+            beat()
+            completionHandler?(nil)
+            return
+        }
         completionHandler?(Data((Self.steps() + Self.log()).utf8))
     }
 
