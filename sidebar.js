@@ -10,6 +10,9 @@
 //   window.wvState()  -> {open, current}               live, survives navigation
 //   window.wvSelect(url)
 //   window.wvSetOpen(open)
+//   window.wvVPNDisconnect()  optional: when bound, the VPN row gets a Disconnect button
+//   (state.vpnRegion in wvState, and window.wvVPNRegion(region) pushed, say which region's
+//   VPN is up; "" for none. A host that sends neither shows no indicator.)
 //   window.wvOpenSettings()   defined by settings.js; the footer button calls it
 //
 // Provided to Go:
@@ -42,6 +45,8 @@
   // down. It must not outlive the switch: when the new page never arrives (a tunnel
   // that fails to start, a site that hangs) this page stays, and a flag left set
   // forever made clicking outside stop closing the panel.
+  var vpnRegion = ""; // the region whose VPN is up, "" for none
+  var vpnRow, vpnText, vpnOff;
   var NAVIGATING_FOR = 6000;
   var navigatingTimer = 0;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
@@ -72,6 +77,28 @@
     "}",
     // Idle-faded so it does not sit on top of video; wakes on hover or when open.
     ".toggle:hover, .wrap.open .toggle, .wrap.near .toggle { opacity: 1; }",
+    // A VPN is up: the button is tinted, brighter than its idle fade, and wears a dot.
+    ".wrap.vpnup .toggle { opacity: 0.75; color: #9be3b4; border-color: rgba(76,211,123,0.85); }",
+    ".wrap.vpnup .toggle::after {",
+    "  content: ''; position: absolute; top: 4px; right: 4px;",
+    "  width: 7px; height: 7px; border-radius: 50%; background: #4cd37b;",
+    "}",
+    ".vpnrow {",
+    "  display: none; align-items: center; gap: 8px;",
+    "  margin: 0 12px 6px; padding: 6px 10px; border-radius: 8px;",
+    "  font-size: 12px; color: #9be3b4;",
+    "  background: rgba(76,211,123,0.12); border: 1px solid rgba(76,211,123,0.35);",
+    "}",
+    ".vpnrow.on { display: flex; }",
+    ".vpnrow .vpntext { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }",
+    // At the bottom, away from the channels, so it is not hit by mistake.
+    ".vpnoff {",
+    "  display: none; margin: 0 12px 8px; padding: 8px 10px; border-radius: 8px;",
+    "  font: inherit; font-size: 12px; color: #ffc2bc; cursor: pointer; text-align: center;",
+    "  background: rgba(255,120,110,0.08); border: 1px solid rgba(255,120,110,0.35);",
+    "}",
+    ".vpnoff.on { display: block; }",
+    ".vpnoff:hover { background: rgba(255,120,110,0.18); }",
     // Open, it is the panel's close button: inside it, at the top right.
     ".wrap.open .toggle { left: calc(var(--pw) - 46px); }",
 
@@ -329,6 +356,20 @@
     head.appendChild(hnav);
     head.appendChild(title);
 
+    vpnRow = document.createElement("div");
+    vpnRow.className = "vpnrow";
+    vpnText = document.createElement("span");
+    vpnText.className = "vpntext";
+    vpnOff = document.createElement("button");
+    vpnOff.type = "button";
+    vpnOff.className = "vpnoff";
+    vpnOff.textContent = "Disconnect VPN and quit";
+    vpnOff.title = "Turn the VPN off and close the app";
+    vpnOff.addEventListener("click", function () {
+      if (window.wvVPNDisconnect) window.wvVPNDisconnect();
+    });
+    vpnRow.appendChild(vpnText);
+
     list = document.createElement("ul");
     list.className = "list";
 
@@ -371,7 +412,9 @@
     vpnBox.appendChild(vpnMsg);
 
     panel.appendChild(head);
+    panel.appendChild(vpnRow);
     panel.appendChild(list);
+    panel.appendChild(vpnOff);
     panel.appendChild(foot);
     wrap.appendChild(toggle);
     wrap.appendChild(panel);
@@ -421,12 +464,29 @@
     });
   }
 
+  // Shows which region's VPN is up (or none): the button's tint and dot, and the row in the
+  // panel with its Disconnect button when the host can disconnect.
+  function applyVPN() {
+    if (!wrap) return;
+    wrap.classList.toggle("vpnup", !!vpnRegion);
+    vpnRow.classList.toggle("on", !!vpnRegion);
+    vpnOff.classList.toggle("on", !!vpnRegion && !!window.wvVPNDisconnect);
+    vpnText.textContent = vpnRegion ? "VPN connected: " + vpnRegion : "";
+    toggle.title = (open ? "Close (F9)" : "Channels (F9)") + (vpnRegion ? " \u2014 VPN " + vpnRegion : "");
+  }
+
+  // Pushed by the host when the VPN comes up or goes away.
+  window.wvVPNRegion = function (region) {
+    vpnRegion = region || "";
+    applyVPN();
+  };
+
   function setOpen(next, notify) {
     open = !!next;
     wrap.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
     toggle.textContent = open ? "\u2715" : "\u2630";
-    toggle.title = open ? "Close (F9)" : "Channels (F9)";
+    toggle.title = (open ? "Close (F9)" : "Channels (F9)") + (vpnRegion ? " \u2014 VPN " + vpnRegion : "");
     if (notify && window.wvSetOpen) window.wvSetOpen(open);
   }
 
@@ -584,6 +644,8 @@
         // Live, so a list edited since startup (settings panel) wins over
         // the copy baked into the page at injection.
         if (state.channels) channels = state.channels;
+        vpnRegion = state.vpnRegion || "";
+        applyVPN();
         current = state.current || "";
         renderList();
         setOpen(!!state.open, false);

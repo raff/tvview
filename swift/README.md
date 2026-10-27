@@ -166,12 +166,15 @@ config up and fetches a URL (UK exits in London, IT in Milan). Its known limit: 
 
 ### Next, in order
 
-1. **The real workflow on the phone:** log in to BBC iPlayer and RaiPlay and play something
-   through the system VPN (BBC also asks about a TV licence). Only the page load and a Rai
-   preview have been seen so far. Look for the tunnel's behaviour on Wi-Fi/cellular changes
-   and when the app goes to the background while audio plays.
-2. **An in-app VPN indicator and a "Disconnect VPN" button** (the VPN no longer outlives the app,
-   but nothing in the app says it is up).
+1. **The real workflow on the phone:** done once, by hand: logged in to BBC iPlayer and RaiPlay
+   and played real shows through the system VPN. Still to watch: Wi-Fi/cellular changes and
+   the app going to the background while audio plays.
+2. **VPN indicator and Disconnect (done).** While a region VPN is up, the sidebar's toggle is
+   tinted green with a dot and the panel shows "VPN connected: UK" with a *Disconnect VPN and quit* button at the bottom of the panel (iOS only: it stops the VPN, then quits the app. On the Mac the tunnel is the app's own and ends when it quits, so only the indicator shows).
+   Native side: `wvState` returns `vpnRegion`; `AppModel.publishVPNRegion()` pushes
+   `window.wvVPNRegion(region)` after each connect/disconnect; the button calls the
+   `wvVPNDisconnect` bridge, which stops the VPN and then quits the app (`exit(0)` on iOS). The Go app shows the indicator on load
+   only, with no Disconnect button yet.
 3. The Mac, `-config`/`-debug` flags, notarization and the other parity gaps under *macOS
    parity* and *Status*.
 

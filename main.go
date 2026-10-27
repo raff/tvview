@@ -139,7 +139,11 @@ func (a *app) bind() error {
 		{"wvState", func() map[string]any {
 			a.mu.Lock()
 			defer a.mu.Unlock()
-			return map[string]any{"open": a.open, "current": a.current, "vpn": a.vpnSt, "channels": a.cfg.Channels}
+			region := ""
+			if a.vpn != nil {
+				region = a.vpn.Current()
+			}
+			return map[string]any{"open": a.open, "current": a.current, "vpn": a.vpnSt, "channels": a.cfg.Channels, "vpnRegion": region}
 		}},
 		{"wvGetConfig", a.configView},
 		{"wvSaveConfig", a.saveFromPanel},

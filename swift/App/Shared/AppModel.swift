@@ -106,6 +106,7 @@ final class AppModel: ObservableObject {
     /// Puts the right tunnel up and then goes to `url`, narrating the wait into
     /// the page it is leaving. Port of enterChannel in main.go.
     private func enter(_ url: String) async {
+        vpnUserOff = false // choosing a channel is asking for its VPN again
         let region = regionFor(url)
         NSLog("tvview: switching to %@ (region %@)", url, region.isEmpty ? "none" : region)
         let began = Date()
@@ -122,6 +123,7 @@ final class AppModel: ObservableObject {
             return
         }
         objectWillChange.send() // the window title shows which region is up
+        publishVPNRegion()
         guard current == url else { return }
         // Keep the spinner through the gap until the new page commits.
         showVPN("working", "Loading…")
@@ -161,7 +163,7 @@ final class AppModel: ObservableObject {
     #if os(iOS) && !targetEnvironment(simulator)
     /// Back in front: if this channel needs a VPN and it has dropped, bring it back and reload.
     private func resumeVPN() {
-        guard VPNManager.usesSystemVPN else { return }
+        guard VPNManager.usesSystemVPN, !vpnUserOff else { return }
         let url = current, region = regionFor(url)
         guard !region.isEmpty else { return }
         Task { [weak self] in
@@ -183,6 +185,32 @@ final class AppModel: ObservableObject {
         var text = "The page could not be loaded: \(error.localizedDescription)"
         if !vpn.current.isEmpty { text += " (through the \(vpn.current) tunnel)" }
         showVPN("error", text)
+    }
+
+    /// Set when the person turned the VPN off from the sidebar: coming back to the app must not
+    /// quietly turn it on again. Cleared when they pick a channel.
+    private var vpnUserOff = false
+
+    /// The sidebar's "Disconnect VPN and quit" button: stop the VPN, then quit. iOS has no
+    /// quit call; exit(0) is what a personal build can do.
+    func disconnectVPN() {
+        vpnUserOff = true
+        Task { [weak self] in
+            guard let self else { return }
+            try? await self.vpn.ensure("", config: self.cfg, store: self.host.webView.configuration.websiteDataStore)
+            // Then the app goes too, so no page is left running with no VPN.
+            #if os(macOS)
+            NSApp.terminate(nil)
+            #else
+            exit(0)
+            #endif
+        }
+    }
+
+    /// Tells the page which region's VPN is up, for the sidebar's indicator.
+    private func publishVPNRegion() {
+        guard let data = try? JSONEncoder().encode(vpn.current), let json = String(data: data, encoding: .utf8) else { return }
+        host.run("window.wvVPNRegion && window.wvVPNRegion(\(json));")
     }
 
     private func showVPN(_ state: String, _ text: String) {

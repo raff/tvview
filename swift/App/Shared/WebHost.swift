@@ -25,7 +25,12 @@ final class WebHost: NSObject, ObservableObject {
 
     /// Functions the injected scripts call; each becomes `window.<name>()`
     /// returning a promise, like go-webview's Bind.
+    // "Disconnect VPN and quit" is iOS only: the Mac's tunnel is the app's own and ends with it.
+    #if os(iOS)
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvVPNDisconnect"]
+    #else
     private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog"]
+    #endif
 
     override init() {
         webView = Self.makeWebView(controller: controller)
@@ -281,12 +286,16 @@ final class WebHost: NSObject, ObservableObject {
                 "current": model.current,
                 "channels": model.cfg.channels.map(Self.object),
                 "vpn": model.vpnSt as Any? ?? NSNull(),
+                "vpnRegion": model.vpn.current,
             ] as [String: Any], nil)
         case "wvSelect":
             if let url = args.first as? String { model.select(url) }
             return (nil, nil)
         case "wvSetOpen":
             if let open = args.first as? Bool { model.setSidebarOpen(open) }
+            return (nil, nil)
+        case "wvVPNDisconnect":
+            model.disconnectVPN()
             return (nil, nil)
         case "wvLog":
             NSLog("tvview: page: %@", (args.first as? String) ?? "")
