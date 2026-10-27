@@ -27,9 +27,9 @@ final class WebHost: NSObject, ObservableObject {
     /// returning a promise, like go-webview's Bind.
     // "Disconnect VPN and quit" is iOS only: the Mac's tunnel is the app's own and ends with it.
     #if os(iOS)
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvVPNDisconnect"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory", "wvVPNDisconnect"]
     #else
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory"]
     #endif
 
     override init() {
@@ -290,6 +290,9 @@ final class WebHost: NSObject, ObservableObject {
             ] as [String: Any], nil)
         case "wvSelect":
             if let url = args.first as? String { model.select(url) }
+            return (nil, nil)
+        case "wvHistory":
+            if let d = (args.first as? NSNumber)?.intValue { model.navigate(d) }
             return (nil, nil)
         case "wvSetOpen":
             if let open = args.first as? Bool { model.setSidebarOpen(open) }

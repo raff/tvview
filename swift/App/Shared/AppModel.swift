@@ -88,14 +88,16 @@ final class AppModel: ObservableObject {
 
     // MARK: channels
 
-    func select(_ url: String) {
+    /// `item`: a history entry to go to, instead of loading the channel's start page, once its
+    /// VPN is up.
+    func select(_ url: String, thenGo item: WKBackForwardListItem? = nil) {
         current = url
         UserDefaults.standard.set(url, forKey: "lastChannel")
         if vpn.current == regionFor(url) {
             vpnSt = nil // a stale error must not follow us to the new page
             host.load(url)
         } else {
-            Task { await enter(url) }
+            Task { await enter(url, thenGo: item) }
         }
     }
 
@@ -105,7 +107,7 @@ final class AppModel: ObservableObject {
 
     /// Puts the right tunnel up and then goes to `url`, narrating the wait into
     /// the page it is leaving. Port of enterChannel in main.go.
-    private func enter(_ url: String) async {
+    private func enter(_ url: String, thenGo item: WKBackForwardListItem? = nil) async {
         vpnUserOff = false // choosing a channel is asking for its VPN again
         let region = regionFor(url)
         NSLog("tvview: switching to %@ (region %@)", url, region.isEmpty ? "none" : region)
@@ -128,7 +130,9 @@ final class AppModel: ObservableObject {
         // Keep the spinner through the gap until the new page commits.
         showVPN("working", "Loading…")
         vpnSt = nil
-        host.load(url)
+        // The status is on the page being left, which a history move may bring back as it was.
+        host.run("window.wvVPN && window.wvVPN({state: 'done', text: ''});")
+        if let item { host.webView.go(to: item) } else { host.load(url) }
         if !region.isEmpty { watchForStall(url, region: region) }
     }
 
@@ -325,6 +329,50 @@ final class AppModel: ObservableObject {
         let region = regionFor(current)
         if !region.isEmpty { watchForStall(current, region: region) }
     }
-    func back() { host.webView.goBack() }
-    func forward() { host.webView.goForward() }
+    /// The channel whose site `url` is on, if any.
+    func channel(for url: URL) -> Channel? {
+        func bare(_ h: String?) -> String { (h ?? "").lowercased().replacingOccurrences(of: "www.", with: "") }
+        let host = bare(url.host)
+        guard !host.isEmpty else { return nil }
+        return cfg.channels.first {
+            let h = bare(URL(string: $0.url)?.host)
+            return !h.isEmpty && (host == h || host.hasSuffix("." + h))
+        }
+    }
+
+    /// The channel (its URL) that `url` belongs to, when that channel's region is not the VPN
+    /// that is up; nil when the page can just load.
+    func channelNeedingVPNSwitch(for url: URL) -> String? {
+        guard let ch = channel(for: url) else { return nil }
+        return ch.region == vpn.current ? nil : ch.url
+    }
+
+    func back() { navigate(-1) }
+    func forward() { navigate(1) }
+
+    /// One step through the history. When that entry is a channel with another region than the
+    /// VPN that is up, the VPN is switched first and the same entry is gone to after.
+    func navigate(_ delta: Int) {
+        let list = host.webView.backForwardList
+        guard let item = delta < 0 ? list.backItem : list.forwardItem else {
+            NSLog("tvview: history %d: nothing there", delta)
+            return
+        }
+        NSLog("tvview: history %d to %@ (vpn %@, switch to %@)", delta, item.url.absoluteString,
+              vpn.current.isEmpty ? "none" : vpn.current, channelNeedingVPNSwitch(for: item.url) ?? "no")
+        if let channel = channelNeedingVPNSwitch(for: item.url) {
+            select(channel, thenGo: item)
+        } else {
+            // The sidebar highlights the channel the page belongs to, not the one last chosen.
+            if let ch = channel(for: item.url), ch.url != current {
+                current = ch.url
+                UserDefaults.standard.set(ch.url, forKey: "lastChannel")
+            }
+            if delta < 0 {
+                host.webView.goBack()
+            } else {
+                host.webView.goForward()
+            }
+        }
+    }
 }

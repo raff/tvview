@@ -345,8 +345,13 @@
       b.textContent = d[0];
       b.title = d[1];
       b.setAttribute("aria-label", d[1]);
+      b.addEventListener("pointerdown", function () { log("history button down " + d[2]); });
       b.addEventListener("click", function () {
-        history.go(d[2]);
+        log("history button click " + d[2]);
+        // The host moves through its history itself when it can: a channel in another region
+        // needs its VPN first.
+        if (window.wvHistory) window.wvHistory(d[2]);
+        else history.go(d[2]);
       });
       hnav.appendChild(b);
     });
@@ -538,6 +543,16 @@
     vpnBox.classList.toggle("err", s.state === "error");
     vpnMsg.textContent = s.text || "";
   };
+
+  // Coming back from the back/forward cache: the page is as it was left, including a status
+  // message about a switch that has long finished.
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    navigating = false;
+    clearTimeout(navigatingTimer);
+    if (vpnBox) { vpnBox.classList.remove("on", "err"); }
+    applyState(0);
+  });
 
   // Wake the toggle button when the pointer approaches the left edge, so it
   // stays discoverable without permanently covering the page.
