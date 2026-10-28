@@ -157,7 +157,23 @@
   var rawBase = "";
   var tab = "channels";
   var closing = false; // a dirty close has been asked for once already
-  var keyHandler = null;
+
+  // Keys typed in the panel must not reach the page, not even in the capture phase: a
+  // TV-style page (YouTube's /tv) takes every key on window and cancels it, which leaves
+  // the fields uneditable. This listener goes in at document start, ahead of the page's,
+  // and stops the event there; the default action (typing) is left alone.
+  ["keydown", "keyup", "keypress"].forEach(function (type) {
+    window.addEventListener(type, function (e) {
+      if (!host) return;
+      if (type === "keydown" && e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        close();
+      } else if (e.composedPath().indexOf(host) >= 0) {
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  });
 
   // ---- tiny DOM helper ----------------------------------------------------
   // Not innerHTML: pages that enforce Trusted Types throw on it.
@@ -708,21 +724,12 @@
     if (window.__wvFitViewport) window.__wvFitViewport(host);
     if (window.__wvApplySafe) window.__wvApplySafe(host);
 
-    keyHandler = function (e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        close();
-      }
-    };
-    window.addEventListener("keydown", keyHandler, true);
   }
 
   // Closes the dialog. With notes, leaves the host up a few seconds to show
   // them in a toast (a click dismisses it; it stays longer when there is
   // something to act on).
   function teardown(notes) {
-    window.removeEventListener("keydown", keyHandler, true);
     model = draft = null;
     var gone = host;
     if (!gone) return;
