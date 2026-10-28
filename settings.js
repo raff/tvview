@@ -194,7 +194,8 @@
         title: c.title || "",
         url: c.url || "",
         region: c.region || "",
-        hide: (c.hide || []).join("\n")
+        hide: (c.hide || []).join("\n"),
+        user_agent: c.user_agent || ""
       };
     });
     d.window = d.window || {};
@@ -224,7 +225,8 @@
           hide: c.hide
             .split("\n")
             .map(function (s) { return s.trim(); })
-            .filter(Boolean)
+            .filter(Boolean),
+          user_agent: (c.user_agent || "").trim()
         };
       })
     };
@@ -462,6 +464,11 @@
         oninput: function () { c.hide = hide.value; touched(); }
       });
 
+      var cua = el("textarea", {
+        rows: "2", placeholder: "default (the user agent above)", value: c.user_agent, spellcheck: "false",
+        oninput: function () { c.user_agent = cua.value; touched(); }
+      });
+
       var up = el("button", { cls: "b sm mv", type: "button", text: "↑", title: "Move up", onclick: function () { move(i, -1, 0); } });
       var down = el("button", { cls: "b sm mv", type: "button", text: "↓", title: "Move down", onclick: function () { move(i, 1, 1); } });
       up.disabled = i === 0;
@@ -484,7 +491,8 @@
         el("div", { cls: "row" }, [el("span", { cls: "spacer" }), el("span", { cls: "num" }), url]),
         el("div", { cls: "grid" }, [
           field("Region (VPN)", region),
-          field("Hide elements (CSS selectors, one per line)", hide)
+          field("Hide elements (CSS selectors, one per line)", hide),
+          field("User agent (overrides the default for this channel)", cua)
         ])
       ]);
       card.querySelector(".grip").addEventListener("pointerdown", function (e) { startDrag(e, card, c); });
@@ -496,7 +504,7 @@
       el("button", {
         cls: "b", type: "button", text: "+ Add channel",
         onclick: function () {
-          draft.channels.push({ title: "", url: "", region: "", hide: "" });
+          draft.channels.push({ title: "", url: "", region: "", hide: "", user_agent: "" });
           touched();
           render();
           body.scrollTop = body.scrollHeight;

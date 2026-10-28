@@ -170,6 +170,29 @@ macOS only: it goes through `WKWebView`'s `-setCustomUserAgent:`, and
 `menu_other.go` no-ops it elsewhere. A failure to apply it is a line on stderr,
 not a refusal to start.
 
+#### Per-channel user agent (Swift app)
+
+A channel can carry its own `user_agent:`, which replaces the global one while
+that channel is loaded (empty or absent means the global one). Some sites serve
+a different interface to a different client, and some refuse sign-in in a web
+view at all. YouTube is both: Google rejects a password sign-in inside a web
+view ("This browser or app may not be secure"), but with a smart-TV user agent
+`youtube.com/tv` shows a code to enter at `youtube.com/activate` in a real
+browser, which signs the web view in. The seeded `channels.yaml` has a
+*YouTube TV UI* channel doing exactly that.
+
+```yaml
+  - title: YouTube TV UI
+    url: https://www.youtube.com/tv
+    user_agent: >-
+      Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko)
+      SamsungBrowser/5.0 Chrome/85.0.4183.93 TV Safari/537.36
+```
+
+It is applied when a channel is loaded, so going back or forward across
+channels in the history keeps the previous channel's string until the next
+channel load. The Go app ignores the key. The settings panel has a field for it.
+
 ### Headphone track buttons
 
 The previous/next track buttons on headphones (and keyboard media keys) seek

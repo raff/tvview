@@ -249,6 +249,11 @@ final class WebHost: NSObject, ObservableObject {
         // Into a frozen page nothing loads: start from a fresh web view.
         if unresponsive { reset() }
         guard let url = URL(string: urlString) else { return }
+        // A channel may bring its own user agent; anything else (about:blank) gets the default.
+        if let installed {
+            let ua = installed.channels.first { $0.url == urlString }?.userAgent ?? ""
+            webView.customUserAgent = ua.isEmpty ? installed.userAgent : ua
+        }
         webView.load(URLRequest(url: url))
     }
 

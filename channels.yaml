@@ -96,6 +96,15 @@ channels:
   - title: YouTube
     url: https://www.youtube.com/
 
+  # The TV interface only loads for a smart-TV user agent. Sign in with the code it
+  # shows, at youtube.com/activate in another browser: Google refuses a password
+  # sign-in inside a web view.
+  - title: YouTube TV UI
+    url: https://www.youtube.com/tv
+    user_agent: >-
+      Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko)
+      SamsungBrowser/5.0 Chrome/85.0.4183.93 TV Safari/537.36
+
   - title: NASA+
     url: https://plus.nasa.gov/scheduled-video/nasa-tv/
 

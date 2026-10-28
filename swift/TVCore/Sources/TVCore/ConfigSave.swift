@@ -85,6 +85,7 @@ extension Config {
             var f: [(String, Node)] = [("title", s(c.title)), ("url", s(c.url))]
             if !c.region.isEmpty { f.append(("region", s(c.region))) }
             if !c.hide.isEmpty { f.append(("hide", seq(c.hide.map(s)))) }
+            if !c.userAgent.isEmpty { f.append(("user_agent", s(c.userAgent))) }
             return map(f)
         })))
 

@@ -7,7 +7,7 @@ private struct FileDoc: Decodable {
     struct Win: Decodable { var title: String?; var width: Int?; var height: Int? }
     struct Med: Decodable { var seek_seconds: Int?; var reverse: Bool? }
     struct VPN: Decodable { var tunnels: [String: String?]? }
-    struct Chan: Decodable { var title: String?; var url: String?; var region: String?; var hide: [String]? }
+    struct Chan: Decodable { var title: String?; var url: String?; var region: String?; var hide: [String]?; var user_agent: String? }
 
     var window: Win?
     var media: Med?
@@ -58,7 +58,8 @@ extension Config {
                 title: title.isEmpty ? url : title,
                 url: url,
                 region: (c.region ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                hide: (c.hide ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                hide: (c.hide ?? []).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
+                userAgent: (c.user_agent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             ))
         }
         if cfg.channels.isEmpty {

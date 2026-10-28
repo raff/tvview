@@ -8,12 +8,39 @@ public struct Channel: Codable, Equatable, Sendable {
     public var url: String
     public var region: String
     public var hide: [String]
+    /// Overrides the config's user_agent for this channel; empty means no override.
+    public var userAgent: String
 
-    public init(title: String, url: String, region: String = "", hide: [String] = []) {
+    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "") {
         self.title = title
         self.url = url
         self.region = region
         self.hide = hide
+        self.userAgent = userAgent
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, url, region, hide
+        case userAgent = "user_agent"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decode(String.self, forKey: .title)
+        url = try c.decode(String.self, forKey: .url)
+        region = try c.decode(String.self, forKey: .region)
+        hide = try c.decode([String].self, forKey: .hide)
+        userAgent = try c.decodeIfPresent(String.self, forKey: .userAgent) ?? ""
+    }
+
+    /// user_agent is left out when empty, so the Go app's JSON shape is unchanged.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(title, forKey: .title)
+        try c.encode(url, forKey: .url)
+        try c.encode(region, forKey: .region)
+        try c.encode(hide, forKey: .hide)
+        if !userAgent.isEmpty { try c.encode(userAgent, forKey: .userAgent) }
     }
 }
 
