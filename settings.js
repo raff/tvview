@@ -158,11 +158,13 @@
   var tab = "channels";
   var closing = false; // a dirty close has been asked for once already
 
-  // Keys typed in the panel must not reach the page, not even in the capture phase: a
-  // TV-style page (YouTube's /tv) takes every key on window and cancels it, which leaves
-  // the fields uneditable. This listener goes in at document start, ahead of the page's,
-  // and stops the event there; the default action (typing) is left alone.
-  ["keydown", "keyup", "keypress"].forEach(function (type) {
+  // Keys and mouse buttons used in the panel must not reach the page, not even in the
+  // capture phase: a TV-style page (YouTube's /tv) cancels mousedown, so a field never
+  // takes focus, and handles every key itself. This listener goes in at document start,
+  // ahead of the page's, and stops the event there; the default action (focusing,
+  // typing) is left alone. Pointer events and click are not stopped: the panel's drag
+  // and buttons use them, and the page does not cancel them.
+  ["keydown", "keyup", "keypress", "mousedown", "mouseup"].forEach(function (type) {
     window.addEventListener(type, function (e) {
       if (!host) return;
       if (type === "keydown" && e.key === "Escape") {
