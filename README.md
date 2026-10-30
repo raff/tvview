@@ -86,6 +86,15 @@ A channel can also carry `hide:`, a list of CSS selectors set to
 pages of the site) — e.g. `hide: [header]` removes Amazon's store header above
 Prime Video. Find selectors with `-debug` and the inspector.
 
+A channel can also carry `rewind_button:`, a CSS selector for the site player's
+own rewind button. The headphone previous-track button then clicks it instead of
+setting the video's `currentTime`. Some players (Disney+) only keep a few seconds
+of back-buffer and snap a direct backward seek back into it, so a rewind goes
+back once and then does nothing; e.g. `rewind_button: .quick-rw` on Disney+.
+`forward_button:` does the same for the next-track button, and `play_button:` for
+play/pause (clicked only when the video's state has to change).
+The selector also matches inside open shadow roots. Forward still seeks the video directly.
+
 Sidebar order follows file order. On startup the app reopens whichever channel
 was last viewed — see *Remembering the last channel* below — falling back to
 the first entry when there is no saved channel, or it no longer matches one in

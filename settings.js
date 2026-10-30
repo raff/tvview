@@ -213,6 +213,9 @@
         url: c.url || "",
         region: c.region || "",
         hide: (c.hide || []).join("\n"),
+        rewind_button: c.rewind_button || "",
+        forward_button: c.forward_button || "",
+        play_button: c.play_button || "",
         user_agent: c.user_agent || ""
       };
     });
@@ -244,6 +247,9 @@
             .split("\n")
             .map(function (s) { return s.trim(); })
             .filter(Boolean),
+          rewind_button: (c.rewind_button || "").trim(),
+          forward_button: (c.forward_button || "").trim(),
+          play_button: (c.play_button || "").trim(),
           user_agent: (c.user_agent || "").trim()
         };
       })
@@ -482,6 +488,20 @@
         oninput: function () { c.hide = hide.value; touched(); }
       });
 
+      var rw = el("input", {
+        type: "text", placeholder: "none (seek the video directly)", value: c.rewind_button, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.rewind_button = rw.value; touched(); }
+      });
+
+      var fw = el("input", {
+        type: "text", placeholder: "none (seek the video directly)", value: c.forward_button, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.forward_button = fw.value; touched(); }
+      });
+      var pl = el("input", {
+        type: "text", placeholder: "none (play/pause the video directly)", value: c.play_button, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.play_button = pl.value; touched(); }
+      });
+
       var cua = el("textarea", {
         rows: "2", placeholder: "default (the user agent above)", value: c.user_agent, spellcheck: "false",
         oninput: function () { c.user_agent = cua.value; touched(); }
@@ -510,6 +530,9 @@
         el("div", { cls: "grid" }, [
           field("Region (VPN)", region),
           field("Hide elements (CSS selectors, one per line)", hide),
+          field("Rewind button (CSS selector the headphone back button clicks)", rw),
+          field("Forward button (CSS selector the headphone next button clicks)", fw),
+          field("Play/pause button (CSS selector the headphone play/pause clicks)", pl),
           field("User agent (overrides the default for this channel)", cua)
         ])
       ]);
@@ -522,7 +545,7 @@
       el("button", {
         cls: "b", type: "button", text: "+ Add channel",
         onclick: function () {
-          draft.channels.push({ title: "", url: "", region: "", hide: "", user_agent: "" });
+          draft.channels.push({ title: "", url: "", region: "", hide: "", rewind_button: "", forward_button: "", play_button: "", user_agent: "" });
           touched();
           render();
           body.scrollTop = body.scrollHeight;

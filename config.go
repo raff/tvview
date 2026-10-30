@@ -48,6 +48,18 @@ type Channel struct {
 	// Hide lists CSS selectors to set to display:none on this channel's
 	// site, for page chrome that gets in the way of the player. See hide.js.
 	Hide []string `yaml:"hide" json:"hide"`
+
+	// RewindButton is a CSS selector for the site player's own rewind
+	// button. When set, the headphone previous-track button clicks it instead
+	// of writing currentTime, for players that fight a direct backward seek.
+	// See mediasession.js.
+	RewindButton string `yaml:"rewind_button" json:"rewind_button,omitempty"`
+
+	// ForwardButton and PlayButton are the same for the next-track button and
+	// for play/pause. PlayButton is clicked only when the video's state has to
+	// change.
+	ForwardButton string `yaml:"forward_button" json:"forward_button,omitempty"`
+	PlayButton    string `yaml:"play_button"    json:"play_button,omitempty"`
 }
 
 // VPNConfig maps each VPN region to the wireguard config file that raises

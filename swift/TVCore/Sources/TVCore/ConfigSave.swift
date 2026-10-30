@@ -85,6 +85,9 @@ extension Config {
             var f: [(String, Node)] = [("title", s(c.title)), ("url", s(c.url))]
             if !c.region.isEmpty { f.append(("region", s(c.region))) }
             if !c.hide.isEmpty { f.append(("hide", seq(c.hide.map(s)))) }
+            if !c.rewindButton.isEmpty { f.append(("rewind_button", s(c.rewindButton))) }
+            if !c.forwardButton.isEmpty { f.append(("forward_button", s(c.forwardButton))) }
+            if !c.playButton.isEmpty { f.append(("play_button", s(c.playButton))) }
             if !c.userAgent.isEmpty { f.append(("user_agent", s(c.userAgent))) }
             return map(f)
         })))

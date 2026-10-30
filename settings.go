@@ -183,6 +183,9 @@ func restartReasons(a *app, old Config, fresh *Config) []string {
 	if !sameHide(old.Channels, fresh.Channels) {
 		r = append(r, "hidden page elements")
 	}
+	if !sameButtons(old.Channels, fresh.Channels) {
+		r = append(r, "player buttons")
+	}
 	if vpnChanged(a, fresh) {
 		r = append(r, "VPN regions")
 	}
@@ -198,6 +201,17 @@ func sameHide(a, b []Channel) bool {
 		return m
 	}
 	return reflect.DeepEqual(hide(a), hide(b))
+}
+
+func sameButtons(a, b []Channel) bool {
+	btns := func(cs []Channel) map[string]string {
+		m := map[string]string{}
+		for _, c := range cs {
+			m[c.URL] = c.RewindButton + "\n" + c.ForwardButton + "\n" + c.PlayButton
+		}
+		return m
+	}
+	return reflect.DeepEqual(btns(a), btns(b))
 }
 
 // vpnChanged is whether the running tunnel manager would differ from one made

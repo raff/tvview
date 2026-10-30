@@ -10,18 +10,30 @@ public struct Channel: Codable, Equatable, Sendable {
     public var hide: [String]
     /// Overrides the config's user_agent for this channel; empty means no override.
     public var userAgent: String
+    /// CSS selector of the site player's own rewind button, clicked by the headphone
+    /// previous-track button; empty means seek the video directly.
+    public var rewindButton: String
+    /// Same for the next-track button and for play/pause.
+    public var forwardButton: String
+    public var playButton: String
 
-    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "") {
+    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "", rewindButton: String = "", forwardButton: String = "", playButton: String = "") {
         self.title = title
         self.url = url
         self.region = region
         self.hide = hide
         self.userAgent = userAgent
+        self.rewindButton = rewindButton
+        self.forwardButton = forwardButton
+        self.playButton = playButton
     }
 
     private enum CodingKeys: String, CodingKey {
         case title, url, region, hide
         case userAgent = "user_agent"
+        case rewindButton = "rewind_button"
+        case forwardButton = "forward_button"
+        case playButton = "play_button"
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,6 +43,9 @@ public struct Channel: Codable, Equatable, Sendable {
         region = try c.decode(String.self, forKey: .region)
         hide = try c.decode([String].self, forKey: .hide)
         userAgent = try c.decodeIfPresent(String.self, forKey: .userAgent) ?? ""
+        rewindButton = try c.decodeIfPresent(String.self, forKey: .rewindButton) ?? ""
+        forwardButton = try c.decodeIfPresent(String.self, forKey: .forwardButton) ?? ""
+        playButton = try c.decodeIfPresent(String.self, forKey: .playButton) ?? ""
     }
 
     /// user_agent is left out when empty, so the Go app's JSON shape is unchanged.
@@ -41,6 +56,9 @@ public struct Channel: Codable, Equatable, Sendable {
         try c.encode(region, forKey: .region)
         try c.encode(hide, forKey: .hide)
         if !userAgent.isEmpty { try c.encode(userAgent, forKey: .userAgent) }
+        if !rewindButton.isEmpty { try c.encode(rewindButton, forKey: .rewindButton) }
+        if !forwardButton.isEmpty { try c.encode(forwardButton, forKey: .forwardButton) }
+        if !playButton.isEmpty { try c.encode(playButton, forKey: .playButton) }
     }
 }
 

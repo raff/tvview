@@ -138,6 +138,10 @@ public enum SettingsPanel {
             if old.channels.map({ [$0.url: $0.hide] }) != new.channels.map({ [$0.url: $0.hide] }) {
                 r.append("hidden page elements")
             }
+            let buttons: (Channel) -> [String: [String]] = { [$0.url: [$0.rewindButton, $0.forwardButton, $0.playButton]] }
+            if old.channels.map(buttons) != new.channels.map(buttons) {
+                r.append("player buttons")
+            }
         }
         // A host that reads the config each time it needs a tunnel (the Swift app)
         // has nothing to restart; one that built its tunnel manager once does.
