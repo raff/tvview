@@ -14,6 +14,16 @@ final class ConfigTests: XCTestCase {
         try? FileManager.default.removeItem(atPath: home)
     }
 
+    func testSearchPageEncodesTheQuery() {
+        let c = Channel(title: "T", url: "https://t", searchURL: "https://t/s/{q}?x=1")
+        XCTAssertEqual(c.searchPage(for: "tom & jerry/1?"), "https://t/s/tom%20%26%20jerry%2F1%3F?x=1")
+    }
+
+    func testSearchPageNeedsThePlaceholder() {
+        XCTAssertNil(Channel(title: "T", url: "https://t").searchPage(for: "x"))
+        XCTAssertNil(Channel(title: "T", url: "https://t", searchURL: "https://t/search").searchPage(for: "x"))
+    }
+
     /// The Go app's own default config, which both apps must load.
     func testRepoDefaultConfigParses() throws {
         let url = URL(fileURLWithPath: #filePath)

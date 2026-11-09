@@ -14,6 +14,9 @@
 //   (state.vpnRegion in wvState, and window.wvVPNRegion(region) pushed, say which region's
 //   VPN is up; "" for none. A host that sends neither shows no indicator.)
 //   window.wvOpenSettings()   defined by settings.js; the footer button calls it
+//   window.wvSearch(query), wvSearchOpen(channelURL, pageURL), wvSearchClear()
+//                             optional: when bound, the panel gets a search box. state.search
+//                             in wvState and window.wvSearchUpdate(search) carry the results.
 //
 // Provided to Go:
 //   window.wvToggleSidebar()  driven by the macOS View menu, which reaches us
@@ -50,6 +53,8 @@
   var NAVIGATING_FOR = 6000;
   var navigatingTimer = 0;
   var host, wrap, toggle, list, vpnBox, vpnSpin, vpnMsg;
+  var searchRow, searchInput;
+  var search = null; // {query, groups: [{title, url, page, status, items}]}, null for the channels
 
   // Go may report a tunnel before build() has run — the eval races the user
   // script on a fresh document. Hold the last state and apply it on build.
@@ -169,6 +174,29 @@
     "  width: 3px; height: 16px; margin-top: -8px;",
     "  background: #5b9dff; border-radius: 2px;",
     "}",
+
+    ".search { display: none; gap: 6px; margin: 0 12px 8px; }",
+    ".search.on { display: flex; }",
+    ".search input {",
+    "  flex: 1; min-width: 0; padding: 7px 10px; font: inherit; color: #e9e9ee;",
+    "  background: rgba(255,255,255,0.08);",
+    "  border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; outline: none;",
+    "}",
+    ".search input:focus { border-color: #5b9dff; }",
+    ".search button {",
+    "  flex: none; width: 32px; font: inherit; color: #e9e9ee; cursor: pointer;",
+    "  background: rgba(255,255,255,0.06);",
+    "  border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;",
+    "}",
+    ".group {",
+    "  display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px 4px;",
+    "  font-size: 11px; font-weight: 600; color: rgba(233,233,238,0.55);",
+    "}",
+    ".group .state { font-weight: 400; color: rgba(233,233,238,0.4); }",
+    ".result img { flex: none; width: 48px; height: 27px; object-fit: cover; border-radius: 3px; }",
+    ".result .name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }",
+    ".sitelink .name { color: #9ecbff; }",
+    ".nores { padding: 12px; color: rgba(233,233,238,0.5); }",
 
     ".foot {",
     "  padding: 10px 16px 14px;",
@@ -378,6 +406,28 @@
     list = document.createElement("ul");
     list.className = "list";
 
+    searchRow = document.createElement("div");
+    searchRow.className = "search";
+    searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Search all channels";
+    searchInput.setAttribute("aria-label", "Search all channels");
+    searchInput.autocomplete = "off";
+    searchInput.spellcheck = false;
+    searchInput.setAttribute("autocapitalize", "off");
+    searchInput.setAttribute("enterkeyhint", "search");
+    var searchClear = document.createElement("button");
+    searchClear.type = "button";
+    searchClear.title = "Clear the search and show the channels";
+    searchClear.setAttribute("aria-label", searchClear.title);
+    searchClear.textContent = "\u2715";
+    searchClear.addEventListener("click", function () {
+      searchInput.value = "";
+      window.wvSearchClear();
+    });
+    searchRow.appendChild(searchInput);
+    searchRow.appendChild(searchClear);
+
     var foot = document.createElement("div");
     foot.className = "foot";
     // Not innerHTML: sites that enforce Trusted Types (YouTube) throw on it,
@@ -418,6 +468,7 @@
 
     panel.appendChild(head);
     panel.appendChild(vpnRow);
+    panel.appendChild(searchRow);
     panel.appendChild(list);
     panel.appendChild(vpnOff);
     panel.appendChild(foot);
@@ -441,7 +492,15 @@
   }
 
   function renderList() {
+    searchRow.classList.toggle("on", !!window.wvSearch && channels.some(function (c) { return c.search_url; }));
+    // An update lands each time a channel finishes, perhaps while the list is being read.
+    var top = list.scrollTop;
     list.textContent = "";
+    if (search) {
+      renderResults();
+      list.scrollTop = top;
+      return;
+    }
     channels.forEach(function (ch) {
       var li = document.createElement("li");
       var btn = document.createElement("button");
@@ -468,6 +527,75 @@
       list.appendChild(li);
     });
   }
+
+  function resultButton(cls, text, image, title, go) {
+    var li = document.createElement("li");
+    var btn = document.createElement("button");
+    btn.className = "item " + cls;
+    btn.type = "button";
+    btn.title = title;
+    if (image) {
+      var img = document.createElement("img");
+      img.referrerPolicy = "no-referrer";
+      img.alt = "";
+      // The page on screen has its own image policy, and many forbid other sites' images.
+      img.addEventListener("error", function () { img.remove(); });
+      img.src = image;
+      btn.appendChild(img);
+    }
+    var name = document.createElement("span");
+    name.className = "name";
+    name.textContent = text;
+    btn.appendChild(name);
+    btn.addEventListener("click", go);
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+
+  // One list, a heading per channel, in the sidebar's order: how well a result matches
+  // cannot be compared from one site to another.
+  function renderResults() {
+    if (!search.groups.length) {
+      var none = document.createElement("li");
+      none.className = "nores";
+      none.textContent = "No channel has a search_url set.";
+      list.appendChild(none);
+      return;
+    }
+    search.groups.forEach(function (g) {
+      var head = document.createElement("li");
+      head.className = "group";
+      var name = document.createElement("span");
+      name.textContent = g.title;
+      head.appendChild(name);
+      if (g.status === "searching") {
+        var state = document.createElement("span");
+        state.className = "state";
+        state.textContent = "Searching\u2026";
+        head.appendChild(state);
+      }
+      list.appendChild(head);
+
+      g.items.forEach(function (it) {
+        resultButton("result", it.title, it.image, it.url, function () { openPage(g.url, it.url); });
+      });
+      if (g.status === "link") {
+        resultButton("sitelink", "Open search on " + g.title, "", g.page, function () { openPage(g.url, g.page); });
+      }
+    });
+  }
+
+  function openPage(channel, page) {
+    current = channel;
+    holdForNavigation();
+    window.wvSearchOpen(channel, page);
+  }
+
+  // Pushed by the host as each channel finishes.
+  window.wvSearchUpdate = function (s) {
+    search = s || null;
+    if (list) renderList();
+  };
 
   // Shows which region's VPN is up (or none): the button's tint and dot, and the row in the
   // panel with its Disconnect button when the host can disconnect.
@@ -503,13 +631,17 @@
   // panel was closed — which the *next* page would then honour.
   function select(url) {
     current = url;
+    holdForNavigation();
+    renderList();
+    if (window.wvSelect) window.wvSelect(url);
+  }
+
+  function holdForNavigation() {
     navigating = true;
     clearTimeout(navigatingTimer);
     navigatingTimer = setTimeout(function () {
       navigating = false;
     }, NAVIGATING_FOR);
-    renderList();
-    if (window.wvSelect) window.wvSelect(url);
   }
 
   // The menubar's way in. setOpen notifies Go, so a.open stays in step exactly
@@ -616,6 +748,36 @@
     });
   }
 
+  // Typing in the search box must not reach the page: its shortcuts would act on the
+  // letters, and a TV-style page cancels mousedown, which stops a field taking focus.
+  // On window in the capture phase and before the page's own listeners, as this script
+  // runs first. Escape and F9 are left for bindKeys below.
+  function isolateSearch() {
+    ["keydown", "keyup", "keypress", "mousedown", "mouseup"].forEach(function (type) {
+      window.addEventListener(
+        type,
+        function (e) {
+          if (e.composedPath()[0] !== searchInput) return;
+          if (e.key === "Escape" || e.key === "F9") return;
+          // Stopped here it never reaches a listener on the box itself, so Enter is
+          // handled here. (isComposing: Enter that confirms an input method's text.)
+          if (type === "keydown" && e.key === "Enter" && !e.isComposing) {
+            e.preventDefault();
+            submitSearch();
+          }
+          e.stopImmediatePropagation();
+        },
+        true
+      );
+    });
+  }
+
+  function submitSearch() {
+    var q = searchInput.value.trim();
+    if (q) window.wvSearch(q);
+    else window.wvSearchClear();
+  }
+
   function bindKeys() {
     // Capture phase: pages happily swallow keydown on their own handlers.
     window.addEventListener(
@@ -662,6 +824,8 @@
         vpnRegion = state.vpnRegion || "";
         applyVPN();
         current = state.current || "";
+        search = state.search || null;
+        searchInput.value = search ? search.query : "";
         renderList();
         setOpen(!!state.open, false);
         if (state.vpn) window.wvVPN(state.vpn);
@@ -711,6 +875,7 @@
     build();
     trackEdge();
     bindKeys();
+    isolateSearch();
     bindDismiss();
     keepAttached();
     applyState(0);

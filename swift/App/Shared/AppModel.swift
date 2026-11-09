@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     let host: WebHost
     private var hostChanges: AnyCancellable?
     let vpn = VPNManager()
+    let search = SearchManager()
     /// Last status shown by the page's VPN overlay, replayed to pages that load
     /// while a tunnel is still coming up (see wvState).
     @Published private(set) var vpnSt: [String: String]?
@@ -51,6 +52,7 @@ final class AppModel: ObservableObject {
 
         host = WebHost()
         host.model = self
+        search.model = self
         // The web view can be replaced, and the views showing it follow this model.
         hostChanges = host.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         host.startWatchdog()
@@ -89,16 +91,28 @@ final class AppModel: ObservableObject {
     // MARK: channels
 
     /// `item`: a history entry to go to, instead of loading the channel's start page, once its
-    /// VPN is up.
-    func select(_ url: String, thenGo item: WKBackForwardListItem? = nil) {
+    /// VPN is up. `target`: a page of the channel to load instead of its start page.
+    func select(_ url: String, thenGo item: WKBackForwardListItem? = nil, target: String? = nil) {
+        search.stop()
         current = url
         UserDefaults.standard.set(url, forKey: "lastChannel")
         if vpn.current == regionFor(url) {
             vpnSt = nil // a stale error must not follow us to the new page
-            host.load(url)
+            host.load(target ?? url, channel: url)
         } else {
-            Task { await enter(url, thenGo: item) }
+            Task { await enter(url, thenGo: item, target: target) }
         }
+    }
+
+    /// A search result, or a channel's results page. Goes through select so the page is
+    /// counted as that channel's, with its region and user agent: neither can be looked
+    /// up from a URL that is not the channel's own.
+    func openSearchResult(channel: String, target: String) {
+        guard cfg.channels.contains(where: { $0.url == channel }),
+              let scheme = URL(string: target)?.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return }
+        select(channel, target: target)
     }
 
     func regionFor(_ url: String) -> String {
@@ -107,7 +121,7 @@ final class AppModel: ObservableObject {
 
     /// Puts the right tunnel up and then goes to `url`, narrating the wait into
     /// the page it is leaving. Port of enterChannel in main.go.
-    private func enter(_ url: String, thenGo item: WKBackForwardListItem? = nil) async {
+    private func enter(_ url: String, thenGo item: WKBackForwardListItem? = nil, target: String? = nil) async {
         vpnUserOff = false // choosing a channel is asking for its VPN again
         let region = regionFor(url)
         NSLog("tvview: switching to %@ (region %@)", url, region.isEmpty ? "none" : region)
@@ -132,7 +146,7 @@ final class AppModel: ObservableObject {
         vpnSt = nil
         // The status is on the page being left, which a history move may bring back as it was.
         host.run("window.wvVPN && window.wvVPN({state: 'done', text: ''});")
-        if let item { host.webView.go(to: item) } else { host.load(url) }
+        if let item { host.webView.go(to: item) } else { host.load(target ?? url, channel: url) }
         if !region.isEmpty { watchForStall(url, region: region) }
     }
 

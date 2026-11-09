@@ -60,6 +60,13 @@ type Channel struct {
 	// change.
 	ForwardButton string `yaml:"forward_button" json:"forward_button,omitempty"`
 	PlayButton    string `yaml:"play_button"    json:"play_button,omitempty"`
+
+	// SearchURL and SearchResult configure searching across channels, which
+	// only the Swift app does. They are here so a save from this app keeps
+	// them. SearchURL is the site's search page with {q} for the query;
+	// SearchResult is a CSS selector matching one result on that page.
+	SearchURL    string `yaml:"search_url"    json:"search_url,omitempty"`
+	SearchResult string `yaml:"search_result" json:"search_result,omitempty"`
 }
 
 // VPNConfig maps each VPN region to the wireguard config file that raises
@@ -324,6 +331,8 @@ func parseConfig(data []byte, path string) (*Config, error) {
 		c.URL = strings.TrimSpace(c.URL)
 		c.Title = strings.TrimSpace(c.Title)
 		c.Region = strings.TrimSpace(c.Region)
+		c.SearchURL = strings.TrimSpace(c.SearchURL)
+		c.SearchResult = strings.TrimSpace(c.SearchResult)
 		if c.URL == "" {
 			continue
 		}

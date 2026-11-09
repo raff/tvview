@@ -95,6 +95,14 @@ back once and then does nothing; e.g. `rewind_button: .quick-rw` on Disney+.
 play/pause (clicked only when the video's state has to change).
 The selector also matches inside open shadow roots. Forward still seeks the video directly.
 
+In the Swift app, the box at the top of the sidebar searches every channel with a
+`search_url:`, the site's search page with `{q}` where the query goes. Add
+`search_result:`, a CSS selector for one result on that page, and results are read
+from a hidden web view that shares your logins, up to 12 per channel. Channels with
+no selector, ones that find nothing, and ones in a region other than the VPN that is
+up get an "Open search on ..." link instead. The Go app keeps these keys when it saves
+but has no search box.
+
 Sidebar order follows file order. On startup the app reopens whichever channel
 was last viewed — see *Remembering the last channel* below — falling back to
 the first entry when there is no saved channel, or it no longer matches one in

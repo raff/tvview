@@ -89,6 +89,8 @@ extension Config {
             if !c.forwardButton.isEmpty { f.append(("forward_button", s(c.forwardButton))) }
             if !c.playButton.isEmpty { f.append(("play_button", s(c.playButton))) }
             if !c.userAgent.isEmpty { f.append(("user_agent", s(c.userAgent))) }
+            if !c.searchURL.isEmpty { f.append(("search_url", s(c.searchURL))) }
+            if !c.searchResult.isEmpty { f.append(("search_result", s(c.searchResult))) }
             return map(f)
         })))
 

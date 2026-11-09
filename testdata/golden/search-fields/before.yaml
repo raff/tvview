@@ -1,0 +1,7 @@
+channels:
+  - title: Tubi
+    url: https://tubitv.com/
+    search_url: https://tubitv.com/search/{q}
+    search_result: "a[href*='/movies/'], a[href*='/series/']"
+  - title: Plain
+    url: https://example.com/
