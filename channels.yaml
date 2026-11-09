@@ -55,18 +55,28 @@ vpn:
     IT: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/IT.conf
     UK: ~/Library/Mobile Documents/com~apple~CloudDocs/tvview/wireguard/UK.conf
 
+# `search_url` puts a channel in the sidebar's search (Swift app only), with {q}
+# where the query goes. `search_result` is a CSS selector for one result on that
+# page: results are read from it in a hidden web view, using your logins. With no
+# `search_result`, or a region that is not the VPN currently up, the search offers
+# a link to the site's own results instead.
 channels:
   - title: PBS
     url: https://www.pbs.org
+    search_url: https://www.pbs.org/search/?q={q}
+    search_result: "a[href*='/video/'], a[href*='/show/']"
 
   - title: Pluto TV
     url: https://pluto.tv/
 
   - title: Tubi
     url: https://tubitv.com/
+    search_url: https://tubitv.com/search/{q}
+    search_result: "a[href*='/movies/'], a[href*='/series/']"
 
   - title: Peacock TV
     url: https://www.peacocktv.com/
+    search_url: https://www.peacocktv.com/watch/search?q={q}
 
   # Geo-restricted to Italy. Needs an IT.conf in place under
   # iCloud Drive/tvview/wireguard (see the vpn block above) — a region with no
@@ -74,10 +84,12 @@ channels:
   # ignored, so the two go together.
   - title: RaiPlay
     url: https://www.raiplay.it/
+    search_url: https://www.raiplay.it/ricerca.html?q={q}
     region: IT
 
   - title: BBC iPlayer
     url: https://www.bbc.co.uk/iplayer
+    search_url: https://www.bbc.co.uk/iplayer/search?q={q}
     region: UK
 
   - title: Hulu
@@ -85,16 +97,21 @@ channels:
 
   - title: HBO Max
     url: https://hbomax.com
+    search_url: https://www.hbomax.com/search?q={q}
 
   # `hide` lists CSS selectors set to display:none on the channel's site, for
   # page chrome that gets in the way — here, the store header above the player.
   - title: Amazon Prime
     url: https://www.amazon.com/gp/video/storefront
+    search_url: https://www.amazon.com/gp/video/search?phrase={q}
+    search_result: "a[href*='/gp/video/detail/']"
     hide:
       - header
 
   - title: YouTube
     url: https://www.youtube.com/
+    search_url: https://www.youtube.com/results?search_query={q}
+    search_result: "a#video-title"
 
   # The TV interface only loads for a smart-TV user agent. Sign in with the code it
   # shows, at youtube.com/activate in another browser: Google refuses a password
@@ -110,9 +127,11 @@ channels:
 
   - title: Al Jazeera
     url: https://www.aljazeera.com/live
+    search_url: https://www.aljazeera.com/search/{q}
 
   - title: DW News
     url: https://www.dw.com/en/live-tv/channel-english
+    search_url: https://www.dw.com/search/?languageCode=en&item={q}
 
   - title: France 24
     url: https://www.france24.com/en/live

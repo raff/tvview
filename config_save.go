@@ -168,6 +168,9 @@ type fileChan struct {
 	RewindButton  string `yaml:"rewind_button,omitempty"`
 	ForwardButton string `yaml:"forward_button,omitempty"`
 	PlayButton    string `yaml:"play_button,omitempty"`
+
+	SearchURL    string `yaml:"search_url,omitempty"`
+	SearchResult string `yaml:"search_result,omitempty"`
 }
 
 // marshalConfig renders cfg as channels.yaml, with tunnels reconciled. It
@@ -178,7 +181,7 @@ func marshalConfig(cfgPath string, cfg *Config) ([]byte, []string, error) {
 		doc.UserAgent = cfg.UserAgent
 	}
 	for _, c := range cfg.Channels {
-		doc.Channels = append(doc.Channels, fileChan{c.Title, c.URL, c.Region, c.Hide, c.RewindButton, c.ForwardButton, c.PlayButton})
+		doc.Channels = append(doc.Channels, fileChan{c.Title, c.URL, c.Region, c.Hide, c.RewindButton, c.ForwardButton, c.PlayButton, c.SearchURL, c.SearchResult})
 	}
 
 	tunnels, warns := reconcileTunnels(cfgPath, cfg)

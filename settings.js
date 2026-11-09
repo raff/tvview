@@ -216,7 +216,9 @@
         rewind_button: c.rewind_button || "",
         forward_button: c.forward_button || "",
         play_button: c.play_button || "",
-        user_agent: c.user_agent || ""
+        user_agent: c.user_agent || "",
+        search_url: c.search_url || "",
+        search_result: c.search_result || ""
       };
     });
     d.window = d.window || {};
@@ -250,7 +252,9 @@
           rewind_button: (c.rewind_button || "").trim(),
           forward_button: (c.forward_button || "").trim(),
           play_button: (c.play_button || "").trim(),
-          user_agent: (c.user_agent || "").trim()
+          user_agent: (c.user_agent || "").trim(),
+          search_url: (c.search_url || "").trim(),
+          search_result: (c.search_result || "").trim()
         };
       })
     };
@@ -507,6 +511,15 @@
         oninput: function () { c.user_agent = cua.value; touched(); }
       });
 
+      var su = el("input", {
+        type: "text", placeholder: "https://site/search?q={q}", value: c.search_url, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.search_url = su.value; touched(); }
+      });
+      var sr = el("input", {
+        type: "text", placeholder: "none (link to the site's results)", value: c.search_result, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.search_result = sr.value; touched(); }
+      });
+
       var up = el("button", { cls: "b sm mv", type: "button", text: "↑", title: "Move up", onclick: function () { move(i, -1, 0); } });
       var down = el("button", { cls: "b sm mv", type: "button", text: "↓", title: "Move down", onclick: function () { move(i, 1, 1); } });
       up.disabled = i === 0;
@@ -533,7 +546,9 @@
           field("Rewind button (CSS selector the headphone back button clicks)", rw),
           field("Forward button (CSS selector the headphone next button clicks)", fw),
           field("Play/pause button (CSS selector the headphone play/pause clicks)", pl),
-          field("User agent (overrides the default for this channel)", cua)
+          field("User agent (overrides the default for this channel)", cua),
+          field("Search URL ({q} is the query)", su),
+          field("Search result (CSS selector for one result on that page)", sr)
         ])
       ]);
       card.querySelector(".grip").addEventListener("pointerdown", function (e) { startDrag(e, card, c); });
@@ -545,7 +560,7 @@
       el("button", {
         cls: "b", type: "button", text: "+ Add channel",
         onclick: function () {
-          draft.channels.push({ title: "", url: "", region: "", hide: "", rewind_button: "", forward_button: "", play_button: "", user_agent: "" });
+          draft.channels.push({ title: "", url: "", region: "", hide: "", rewind_button: "", forward_button: "", play_button: "", user_agent: "", search_url: "", search_result: "" });
           touched();
           render();
           body.scrollTop = body.scrollHeight;

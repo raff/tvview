@@ -27,9 +27,9 @@ final class WebHost: NSObject, ObservableObject {
     /// returning a promise, like go-webview's Bind.
     // "Disconnect VPN and quit" is iOS only: the Mac's tunnel is the app's own and ends with it.
     #if os(iOS)
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory", "wvVPNDisconnect"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory", "wvVPNDisconnect", "wvSearch", "wvSearchOpen", "wvSearchClear"]
     #else
-    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory"]
+    private static let bound = ["wvState", "wvSelect", "wvSetOpen", "wvGetConfig", "wvSaveConfig", "wvLog", "wvHistory", "wvSearch", "wvSearchOpen", "wvSearchClear"]
     #endif
 
     override init() {
@@ -245,13 +245,14 @@ final class WebHost: NSObject, ObservableObject {
 
     // MARK: driving the page
 
-    func load(_ urlString: String) {
+    /// `channel`: the channel `urlString` is a page of, when it is not the channel's own URL.
+    func load(_ urlString: String, channel: String? = nil) {
         // Into a frozen page nothing loads: start from a fresh web view.
         if unresponsive { reset() }
         guard let url = URL(string: urlString) else { return }
         // A channel may bring its own user agent; anything else (about:blank) gets the default.
         if let installed {
-            let ua = installed.channels.first { $0.url == urlString }?.userAgent ?? ""
+            let ua = installed.channels.first { $0.url == (channel ?? urlString) }?.userAgent ?? ""
             webView.customUserAgent = ua.isEmpty ? installed.userAgent : ua
         }
         webView.load(URLRequest(url: url))
@@ -292,9 +293,21 @@ final class WebHost: NSObject, ObservableObject {
                 "channels": model.cfg.channels.map(Self.object),
                 "vpn": model.vpnSt as Any? ?? NSNull(),
                 "vpnRegion": model.vpn.current,
+                "search": model.search.state,
             ] as [String: Any], nil)
         case "wvSelect":
             if let url = args.first as? String { model.select(url) }
+            return (nil, nil)
+        case "wvSearch":
+            if let q = args.first as? String { model.search.start(q) }
+            return (nil, nil)
+        case "wvSearchOpen":
+            if args.count == 2, let channel = args[0] as? String, let target = args[1] as? String {
+                model.openSearchResult(channel: channel, target: target)
+            }
+            return (nil, nil)
+        case "wvSearchClear":
+            model.search.clear()
             return (nil, nil)
         case "wvHistory":
             if let d = (args.first as? NSNumber)?.intValue { model.navigate(d) }

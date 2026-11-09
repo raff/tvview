@@ -16,8 +16,14 @@ public struct Channel: Codable, Equatable, Sendable {
     /// Same for the next-track button and for play/pause.
     public var forwardButton: String
     public var playButton: String
+    /// The site's search page, with `{q}` where the query goes; empty means the channel
+    /// is left out of searches.
+    public var searchURL: String
+    /// CSS selector matching one result on the search page, read by a hidden web view.
+    /// Empty means the search offers a link to the site's own results page instead.
+    public var searchResult: String
 
-    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "", rewindButton: String = "", forwardButton: String = "", playButton: String = "") {
+    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "", rewindButton: String = "", forwardButton: String = "", playButton: String = "", searchURL: String = "", searchResult: String = "") {
         self.title = title
         self.url = url
         self.region = region
@@ -26,6 +32,17 @@ public struct Channel: Codable, Equatable, Sendable {
         self.rewindButton = rewindButton
         self.forwardButton = forwardButton
         self.playButton = playButton
+        self.searchURL = searchURL
+        self.searchResult = searchResult
+    }
+
+    /// The search page for `query`, or nil when this channel has no usable search_url.
+    public func searchPage(for query: String) -> String? {
+        guard searchURL.contains("{q}") else { return nil }
+        // Only unreserved characters stay literal: {q} may sit in a path or in a query.
+        let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        guard let q = query.addingPercentEncoding(withAllowedCharacters: safe) else { return nil }
+        return searchURL.replacingOccurrences(of: "{q}", with: q)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -34,6 +51,8 @@ public struct Channel: Codable, Equatable, Sendable {
         case rewindButton = "rewind_button"
         case forwardButton = "forward_button"
         case playButton = "play_button"
+        case searchURL = "search_url"
+        case searchResult = "search_result"
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,6 +65,8 @@ public struct Channel: Codable, Equatable, Sendable {
         rewindButton = try c.decodeIfPresent(String.self, forKey: .rewindButton) ?? ""
         forwardButton = try c.decodeIfPresent(String.self, forKey: .forwardButton) ?? ""
         playButton = try c.decodeIfPresent(String.self, forKey: .playButton) ?? ""
+        searchURL = try c.decodeIfPresent(String.self, forKey: .searchURL) ?? ""
+        searchResult = try c.decodeIfPresent(String.self, forKey: .searchResult) ?? ""
     }
 
     /// user_agent is left out when empty, so the Go app's JSON shape is unchanged.
@@ -59,6 +80,8 @@ public struct Channel: Codable, Equatable, Sendable {
         if !rewindButton.isEmpty { try c.encode(rewindButton, forKey: .rewindButton) }
         if !forwardButton.isEmpty { try c.encode(forwardButton, forKey: .forwardButton) }
         if !playButton.isEmpty { try c.encode(playButton, forKey: .playButton) }
+        if !searchURL.isEmpty { try c.encode(searchURL, forKey: .searchURL) }
+        if !searchResult.isEmpty { try c.encode(searchResult, forKey: .searchResult) }
     }
 }
 
