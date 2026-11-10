@@ -21,6 +21,8 @@ final class ConfigTests: XCTestCase {
 
     func testSearchPageNeedsThePlaceholder() {
         XCTAssertNil(Channel(title: "T", url: "https://t").searchPage(for: "x"))
+        // A script gets the page as it is: the query goes to the script, not the URL.
+        XCTAssertEqual(Channel(title: "T", url: "https://t", searchURL: "https://t/search", searchScript: "return []").searchPage(for: "x"), "https://t/search")
         XCTAssertNil(Channel(title: "T", url: "https://t", searchURL: "https://t/search").searchPage(for: "x"))
     }
 

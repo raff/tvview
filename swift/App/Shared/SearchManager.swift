@@ -67,7 +67,7 @@ final class SearchManager {
         let up = model.vpn.current
         groups = model.cfg.channels.compactMap { ch in
             guard let page = ch.searchPage(for: query) else { return nil }
-            let readable = !ch.searchResult.isEmpty && ch.region == up
+            let readable = (!ch.searchResult.isEmpty || !ch.searchScript.isEmpty) && ch.region == up
             return Group(channel: ch, page: page, status: readable ? .searching : .link)
         }
         queue = groups.indices.filter { groups[$0].status == .searching }
@@ -109,7 +109,7 @@ final class SearchManager {
                 continue
             }
             let scrape = Scrape(
-                url: url, selector: ch.searchResult,
+                url: url, selector: ch.searchResult, script: ch.searchScript, query: query,
                 userAgent: ch.userAgent.isEmpty ? model.cfg.userAgent : ch.userAgent,
                 beside: model.host.webView
             ) { [weak self] scrape, items in
@@ -142,12 +142,18 @@ private final class Scrape: NSObject, WKScriptMessageHandler, WKNavigationDelega
 
     private let view: WKWebView
     private let url: URL
+    /// The channel's search_script, run in the loaded page in place of the selector.
+    private let script: String
+    private let query: String
+    private var scriptRan = false
     private weak var beside: WKWebView?
     private var onDone: ((Scrape, [SearchManager.Item]) -> Void)?
     private var timer: Task<Void, Never>?
 
-    init(url: URL, selector: String, userAgent: String, beside: WKWebView, onDone: @escaping (Scrape, [SearchManager.Item]) -> Void) {
+    init(url: URL, selector: String, script: String, query: String, userAgent: String, beside: WKWebView, onDone: @escaping (Scrape, [SearchManager.Item]) -> Void) {
         self.url = url
+        self.script = script
+        self.query = query
         self.beside = beside
         self.onDone = onDone
         let config = WKWebViewConfiguration() // the default data store: the same logins
@@ -157,9 +163,11 @@ private final class Scrape: NSObject, WKScriptMessageHandler, WKNavigationDelega
         view = WKWebView(frame: CGRect(x: -20000, y: 0, width: 1280, height: 800), configuration: config)
         view.customUserAgent = userAgent
         super.init()
-        controller.addUserScript(WKUserScript(
-            source: "(function (selector) {\(Self.extract)})(\(WebHost.json([selector]))[0]);",
-            injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Self.world))
+        if script.isEmpty {
+            controller.addUserScript(WKUserScript(
+                source: "(function (selector) {\(Self.extract)})(\(WebHost.json([selector]))[0]);",
+                injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Self.world))
+        }
         controller.add(self, contentWorld: Self.world, name: "search")
         view.navigationDelegate = self
     }
@@ -203,13 +211,36 @@ private final class Scrape: NSObject, WKScriptMessageHandler, WKNavigationDelega
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        let found = message.body as? [[String: String]] ?? []
-        // From a site's page, so it is checked here as well as where it is shown.
-        finish(found.compactMap { r in
+        finish(Self.items(from: message.body))
+    }
+
+    /// The page has loaded: run the channel's search_script, an async function body given
+    /// `query`. A script that throws, or returns anything but a list, finds nothing.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard !script.isEmpty, !scriptRan else { return }
+        scriptRan = true
+        webView.callAsyncJavaScript(script, arguments: ["query": query], in: nil, in: Self.world) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let value):
+                self.finish(Self.items(from: value as Any))
+            case .failure(let error):
+                NSLog("tvview: search script of %@ failed: %@", self.url.absoluteString, error.localizedDescription)
+                self.finish([])
+            }
+        }
+    }
+
+    /// Up to 12 results from what a page (or script) handed over. It is a site's data, so
+    /// it is checked here as well as where it is shown.
+    private static func items(from body: Any) -> [SearchManager.Item] {
+        let list = (body as? [Any] ?? []).compactMap { $0 as? [String: Any] }
+        let found = list.map { $0.mapValues { v in v as? String ?? "" } }
+        return Array(found.compactMap { r -> SearchManager.Item? in
             guard let title = r["title"], !title.isEmpty, let link = r["url"], Self.isWeb(link) else { return nil }
             let image = r["image"] ?? ""
             return SearchManager.Item(title: title, url: link, image: Self.isWeb(image) ? image : "")
-        })
+        }.prefix(12))
     }
 
     private static func isWeb(_ s: String) -> Bool {
@@ -240,7 +271,12 @@ private final class Scrape: NSObject, WKScriptMessageHandler, WKNavigationDelega
     private static let extract = #"""
     var LIMIT = 12, TICK = 500, SETTLED = 3, MAX_TICKS = 24;
 
-    function clean(s) { return (s || "").replace(/\s+/g, " ").trim().slice(0, 140); }
+    // An aria-label can carry bidi marks and a position suffix ("Dune. Row 1 of 10, Column 4
+    // of 4. Rated PG-13"), which HBO Max uses; neither is part of the title.
+    function clean(s) {
+      return (s || "").replace(/[\u200e\u200f\u2066-\u2069]/g, "").replace(/\.\s*Row \d+ of \d+.*$/, "")
+        .replace(/\s+/g, " ").trim().slice(0, 140);
+    }
 
     function linkOf(el) {
       return el.closest("a[href]") || el.querySelector("a[href]");
@@ -253,7 +289,10 @@ private final class Scrape: NSObject, WKScriptMessageHandler, WKNavigationDelega
         var a = linkOf(els[i]);
         if (!a || seen[a.href]) continue;
         var img = a.querySelector("img") || els[i].querySelector("img");
-        var title = clean(a.getAttribute("title")) || clean(a.textContent) ||
+        // A selector can point at the title inside the link, for a link whose own text
+        // carries more (a rating, a year).
+        var inner = els[i] !== a && a.contains(els[i]) ? clean(els[i].textContent) : "";
+        var title = clean(a.getAttribute("title")) || inner || clean(a.textContent) ||
           clean(img && img.alt) || clean(a.getAttribute("aria-label"));
         if (!title) continue;
         seen[a.href] = true;

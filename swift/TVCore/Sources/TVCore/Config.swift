@@ -22,8 +22,12 @@ public struct Channel: Codable, Equatable, Sendable {
     /// CSS selector matching one result on the search page, read by a hidden web view.
     /// Empty means the search offers a link to the site's own results page instead.
     public var searchResult: String
+    /// JavaScript for sites a selector can't read: an async function body run in the loaded
+    /// search page, given `query`, returning an array of `{title, url, image}`. Replaces
+    /// `searchResult`, and lets `searchURL` go without a `{q}`.
+    public var searchScript: String
 
-    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "", rewindButton: String = "", forwardButton: String = "", playButton: String = "", searchURL: String = "", searchResult: String = "") {
+    public init(title: String, url: String, region: String = "", hide: [String] = [], userAgent: String = "", rewindButton: String = "", forwardButton: String = "", playButton: String = "", searchURL: String = "", searchResult: String = "", searchScript: String = "") {
         self.title = title
         self.url = url
         self.region = region
@@ -34,10 +38,12 @@ public struct Channel: Codable, Equatable, Sendable {
         self.playButton = playButton
         self.searchURL = searchURL
         self.searchResult = searchResult
+        self.searchScript = searchScript
     }
 
     /// The search page for `query`, or nil when this channel has no usable search_url.
     public func searchPage(for query: String) -> String? {
+        if !searchScript.isEmpty && !searchURL.contains("{q}") { return searchURL.isEmpty ? nil : searchURL }
         guard searchURL.contains("{q}") else { return nil }
         // Only unreserved characters stay literal: {q} may sit in a path or in a query.
         let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
@@ -53,6 +59,7 @@ public struct Channel: Codable, Equatable, Sendable {
         case playButton = "play_button"
         case searchURL = "search_url"
         case searchResult = "search_result"
+        case searchScript = "search_script"
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,6 +74,7 @@ public struct Channel: Codable, Equatable, Sendable {
         playButton = try c.decodeIfPresent(String.self, forKey: .playButton) ?? ""
         searchURL = try c.decodeIfPresent(String.self, forKey: .searchURL) ?? ""
         searchResult = try c.decodeIfPresent(String.self, forKey: .searchResult) ?? ""
+        searchScript = try c.decodeIfPresent(String.self, forKey: .searchScript) ?? ""
     }
 
     /// user_agent is left out when empty, so the Go app's JSON shape is unchanged.
@@ -82,6 +90,7 @@ public struct Channel: Codable, Equatable, Sendable {
         if !playButton.isEmpty { try c.encode(playButton, forKey: .playButton) }
         if !searchURL.isEmpty { try c.encode(searchURL, forKey: .searchURL) }
         if !searchResult.isEmpty { try c.encode(searchResult, forKey: .searchResult) }
+        if !searchScript.isEmpty { try c.encode(searchScript, forKey: .searchScript) }
     }
 }
 

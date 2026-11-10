@@ -218,7 +218,8 @@
         play_button: c.play_button || "",
         user_agent: c.user_agent || "",
         search_url: c.search_url || "",
-        search_result: c.search_result || ""
+        search_result: c.search_result || "",
+        search_script: c.search_script || ""
       };
     });
     d.window = d.window || {};
@@ -254,7 +255,8 @@
           play_button: (c.play_button || "").trim(),
           user_agent: (c.user_agent || "").trim(),
           search_url: (c.search_url || "").trim(),
-          search_result: (c.search_result || "").trim()
+          search_result: (c.search_result || "").trim(),
+          search_script: (c.search_script || "").trim()
         };
       })
     };
@@ -520,6 +522,11 @@
         oninput: function () { c.search_result = sr.value; touched(); }
       });
 
+      var ss = el("textarea", {
+        rows: "4", placeholder: "none (use the selector above)", value: c.search_script, autocapitalize: "off", spellcheck: "false",
+        oninput: function () { c.search_script = ss.value; touched(); }
+      });
+
       var up = el("button", { cls: "b sm mv", type: "button", text: "↑", title: "Move up", onclick: function () { move(i, -1, 0); } });
       var down = el("button", { cls: "b sm mv", type: "button", text: "↓", title: "Move down", onclick: function () { move(i, 1, 1); } });
       up.disabled = i === 0;
@@ -548,7 +555,8 @@
           field("Play/pause button (CSS selector the headphone play/pause clicks)", pl),
           field("User agent (overrides the default for this channel)", cua),
           field("Search URL ({q} is the query)", su),
-          field("Search result (CSS selector for one result on that page)", sr)
+          field("Search result (CSS selector for one result on that page)", sr),
+          field("Search script (JavaScript; async function body given `query`, returns [{title, url, image}]; replaces the selector)", ss)
         ])
       ]);
       card.querySelector(".grip").addEventListener("pointerdown", function (e) { startDrag(e, card, c); });
@@ -560,7 +568,7 @@
       el("button", {
         cls: "b", type: "button", text: "+ Add channel",
         onclick: function () {
-          draft.channels.push({ title: "", url: "", region: "", hide: "", rewind_button: "", forward_button: "", play_button: "", user_agent: "", search_url: "", search_result: "" });
+          draft.channels.push({ title: "", url: "", region: "", hide: "", rewind_button: "", forward_button: "", play_button: "", user_agent: "", search_url: "", search_result: "", search_script: "" });
           touched();
           render();
           body.scrollTop = body.scrollHeight;

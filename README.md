@@ -103,6 +103,14 @@ no selector, ones that find nothing, and ones in a region other than the VPN tha
 up get an "Open search on ..." link instead. The Go app keeps these keys when it saves
 but has no search box.
 
+For sites a selector can't read (results fetched from an API, or links built by
+script, as on Peacock), `search_script:` replaces `search_result:`. It is the body of
+an async JavaScript function, run in the loaded `search_url` page (so `fetch` is
+same-origin or CORS as the site allows) with the query as `query`. It returns an array
+of `{title, url, image}` (`image` optional). `search_url:` needs no `{q}` then. A script
+that throws or returns nothing gives the "Open search on ..." link. The channels.yaml
+example has one for Peacock TV.
+
 Sidebar order follows file order. On startup the app reopens whichever channel
 was last viewed — see *Remembering the last channel* below — falling back to
 the first entry when there is no saved channel, or it no longer matches one in

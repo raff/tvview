@@ -60,7 +60,7 @@ extension Config {
         // Yams leaves `null`, `~` and "" bare even when tagged as strings, which
         // would read back as null. Anything not plainly safe is double-quoted.
         func s(_ v: String) -> Node {
-            .scalar(.init(v, Tag(.str), isPlainSafe(v) ? .any : .doubleQuoted))
+            .scalar(.init(v, Tag(.str), v.contains("\n") ? .literal : isPlainSafe(v) ? .any : .doubleQuoted))
         }
         func i(_ v: Int) -> Node { .scalar(.init(String(v), Tag(.int))) }
         func b(_ v: Bool) -> Node { .scalar(.init(v ? "true" : "false", Tag(.bool))) }
@@ -91,6 +91,7 @@ extension Config {
             if !c.userAgent.isEmpty { f.append(("user_agent", s(c.userAgent))) }
             if !c.searchURL.isEmpty { f.append(("search_url", s(c.searchURL))) }
             if !c.searchResult.isEmpty { f.append(("search_result", s(c.searchResult))) }
+            if !c.searchScript.isEmpty { f.append(("search_script", s(c.searchScript))) }
             return map(f)
         })))
 

@@ -7,7 +7,7 @@ private struct FileDoc: Decodable {
     struct Win: Decodable { var title: String?; var width: Int?; var height: Int? }
     struct Med: Decodable { var seek_seconds: Int?; var reverse: Bool? }
     struct VPN: Decodable { var tunnels: [String: String?]? }
-    struct Chan: Decodable { var title: String?; var url: String?; var region: String?; var hide: [String]?; var user_agent: String?; var rewind_button: String?; var forward_button: String?; var play_button: String?; var search_url: String?; var search_result: String? }
+    struct Chan: Decodable { var title: String?; var url: String?; var region: String?; var hide: [String]?; var user_agent: String?; var rewind_button: String?; var forward_button: String?; var play_button: String?; var search_url: String?; var search_result: String?; var search_script: String? }
 
     var window: Win?
     var media: Med?
@@ -64,7 +64,8 @@ extension Config {
                 forwardButton: (c.forward_button ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                 playButton: (c.play_button ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                 searchURL: (c.search_url ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                searchResult: (c.search_result ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                searchResult: (c.search_result ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                searchScript: (c.search_script ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             ))
         }
         if cfg.channels.isEmpty {

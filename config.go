@@ -67,6 +67,12 @@ type Channel struct {
 	// SearchResult is a CSS selector matching one result on that page.
 	SearchURL    string `yaml:"search_url"    json:"search_url,omitempty"`
 	SearchResult string `yaml:"search_result" json:"search_result,omitempty"`
+
+	// SearchScript is JavaScript for sites a selector cannot read (results fetched
+	// from an API, links built in script). The Swift app runs it as an async function
+	// body in the loaded search page, with the query as `query`; it returns an array of
+	// {title, url, image}. It replaces SearchResult.
+	SearchScript string `yaml:"search_script" json:"search_script,omitempty"`
 }
 
 // VPNConfig maps each VPN region to the wireguard config file that raises
@@ -333,6 +339,7 @@ func parseConfig(data []byte, path string) (*Config, error) {
 		c.Region = strings.TrimSpace(c.Region)
 		c.SearchURL = strings.TrimSpace(c.SearchURL)
 		c.SearchResult = strings.TrimSpace(c.SearchResult)
+		c.SearchScript = strings.TrimSpace(c.SearchScript)
 		if c.URL == "" {
 			continue
 		}

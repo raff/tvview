@@ -79,6 +79,27 @@ final class AppModel: ObservableObject {
             host.load("about:blank")
             Task { await enter(current) }
         }
+        #if DEBUG && os(macOS)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self else { return }
+            DebugDump.runIfRequested(userAgent: self.cfg.userAgent, beside: self.host.webView)
+            // TVVIEW_SEARCH=<query>: run the sidebar search, write what it found to
+            // TVVIEW_DUMP_DIR/search.json after TVVIEW_DUMP_WAIT seconds, and quit.
+            if let q = ProcessInfo.processInfo.environment["TVVIEW_SEARCH"] {
+                let env = ProcessInfo.processInfo.environment
+                self.search.start(q)
+                let wait = Double(env["TVVIEW_DUMP_WAIT"] ?? "") ?? 30
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                    let dir = env["TVVIEW_DUMP_DIR"] ?? "/tmp"
+                    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                    if let data = try? JSONSerialization.data(withJSONObject: self.search.state, options: [.prettyPrinted, .sortedKeys]) {
+                        try? data.write(to: URL(fileURLWithPath: dir + "/search.json"))
+                    }
+                    NSApp.terminate(nil)
+                }
+            }
+        }
+        #endif
     }
 
     static var defaultConfigText: String {

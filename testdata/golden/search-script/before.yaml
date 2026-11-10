@@ -1,0 +1,7 @@
+channels:
+  - title: Scripted
+    url: https://example.com/
+    search_url: https://example.com/search
+    search_script: |
+      const r = await fetch("/api?q=" + encodeURIComponent(query));
+      return (await r.json()).map(x => ({ title: x.t, url: x.u }));

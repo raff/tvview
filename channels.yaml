@@ -59,7 +59,10 @@ vpn:
 # where the query goes. `search_result` is a CSS selector for one result on that
 # page: results are read from it in a hidden web view, using your logins. With no
 # `search_result`, or a region that is not the VPN currently up, the search offers
-# a link to the site's own results instead.
+# a link to the site's own results instead. For a site a selector can't read, use
+# `search_script` in its place: the body of an async JavaScript function, run in the
+# loaded `search_url` page with the query as `query`, returning a list of
+# {title, url, image}. `search_url` then needs no {q}. See Peacock TV below.
 channels:
   # `hide` lists CSS selectors set to display:none on the channel's site, for
   # page chrome that gets in the way — here, the store header above the player.
@@ -80,10 +83,12 @@ channels:
   - title: Netflix
     url: https://www.netflix.com/
     search_url: https://www.netflix.com/search?q={q}
+    search_result: "a[data-uia='standard-card']"
 
   - title: HBO Max
     url: https://hbomax.com
     search_url: https://www.hbomax.com/search?q={q}
+    search_result: "a[data-tile-grid='true'] span[class*='PrimaryTitle']"
 
   # Geo-restricted to Italy. Needs an IT.conf in place under
   # iCloud Drive/tvview/wireguard (see the vpn block above) — a region with no
@@ -101,7 +106,19 @@ channels:
 
   - title: Peacock TV
     url: https://www.peacocktv.com/
-    search_url: https://www.peacocktv.com/watch/search?q={q}
+    search_url: https://www.peacocktv.com/watch/search
+    search_script: |
+      const r = await fetch(
+        "https://bff-ext.clients.peacocktv.com/bff/search/v2?contentFormat=longform&entityType=programme%2Cseries&limit=12&term=" + encodeURIComponent(query),
+        { credentials: "omit", headers: {
+          "x-skyott-activeterritory": "US", "x-skyott-client-version": "7.10.31",
+          "x-skyott-device": "COMPUTER", "x-skyott-language": "en-US", "x-skyott-platform": "PC",
+          "x-skyott-proposition": "NBCUOTT", "x-skyott-provider": "NBCU", "x-skyott-territory": "US" } });
+      const j = await r.json();
+      return j.data.search.results.filter(x => x.slug).map(x => ({
+        title: x.title,
+        url: "https://www.peacocktv.com/watch/asset" + x.slug,
+        image: (x.images.find(i => i.type === "tile34") || {}).url || "" }));
 
   - title: PBS
     url: https://www.pbs.org
