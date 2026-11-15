@@ -70,6 +70,9 @@ final class WebHost: NSObject, ObservableObject {
         view.scrollView.backgroundColor = .black
         #else
         view.underPageBackgroundColor = .black
+        // The web view paints opaque white until its first page is ready, which is
+        // a visible flash before the splash. Same fix as the Go app's blackBackground.
+        view.setValue(false, forKey: "drawsBackground")
         #endif
         if let installed { view.customUserAgent = installed.userAgent }
     }

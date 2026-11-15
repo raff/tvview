@@ -23,6 +23,9 @@ var mediaSessionJS string
 //go:embed hide.js
 var hideJS string
 
+//go:embed splash.js
+var splashJS string
+
 // app holds the state the sidebar needs to survive a navigation. The injected
 // script is re-run from scratch on every page load, so it asks Go for this.
 type app struct {
@@ -44,6 +47,7 @@ type app struct {
 func main() {
 	configPath := flag.String("config", "", "path to a channels.yaml (default: search ./, iCloud Drive/tvview, then ~/.config/tvview/)")
 	debug := flag.Bool("debug", false, "enable developer tools")
+	noSplash := flag.Bool("nosplash", false, "skip the power-on animation at startup")
 	flag.Parse()
 
 	cfg, err := LoadConfig(*configPath)
@@ -84,7 +88,7 @@ func main() {
 	if err := a.bind(); err != nil {
 		log.Fatal("tvview: ", err)
 	}
-	if err := a.inject(); err != nil {
+	if err := a.inject(!*noSplash); err != nil {
 		log.Fatal("tvview: ", err)
 	}
 
@@ -117,12 +121,18 @@ func main() {
 	// about:blank first gives the status overlay a document to appear in, and
 	// keeps the site from ever seeing the unrouted address — a geo-block, once
 	// cached, outlives the tunnel that would have prevented it.
-	if a.vpn != nil && a.regionFor(start) != "" {
-		w.Navigate("about:blank")
-		go a.enterChannel(start)
-	} else {
-		w.Navigate(start)
+	// The splash (splash.js) is drawn over whatever loads first, so the channel
+	// starts loading right away underneath it.
+	enter := func() {
+		if a.vpn != nil && a.regionFor(start) != "" {
+			w.Navigate("about:blank")
+			go a.enterChannel(start)
+		} else {
+			w.Navigate(start)
+		}
 	}
+
+	enter()
 
 	go a.watch()
 	w.Run()
@@ -166,8 +176,13 @@ func (a *app) bind() error {
 
 // inject registers the user scripts: the static channel list first, then the
 // sidebar itself.
-func (a *app) inject() error {
-	boot, err := json.Marshal(map[string]any{"channels": a.cfg.Channels, "media": a.cfg.Media})
+func (a *app) inject(splash bool) error {
+	bootData := map[string]any{"channels": a.cfg.Channels, "media": a.cfg.Media}
+	if splash {
+		// splash.js plays only for a page that loads right after this moment.
+		bootData["splash"] = time.Now().UnixMilli()
+	}
+	boot, err := json.Marshal(bootData)
 	if err != nil {
 		return fmt.Errorf("encoding channels: %w", err)
 	}
@@ -176,6 +191,7 @@ func (a *app) inject() error {
 	a.w.Init(sidebarJS)
 	a.w.Init(mediaSessionJS)
 	a.w.Init(hideJS)
+	a.w.Init(splashJS)
 	a.w.Init(settingsJS)
 	return nil
 }

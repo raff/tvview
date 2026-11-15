@@ -37,6 +37,7 @@ struct TVViewApp: App {
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @StateObject private var splash = SplashModel()
 
     var body: some View {
         GeometryReader { geo in
@@ -72,6 +73,7 @@ struct ContentView: View {
             Color.black
             WebViewContainer(webView: model.host.webView)
                 .id(ObjectIdentifier(model.host.webView)) // a replaced web view needs a new container
+            SplashOverlay(splash: splash)
             VStack(spacing: 8) {
                 #if os(iOS)
                 if model.usingBuiltIn && !model.folderPromptDismissed { folderPrompt }

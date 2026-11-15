@@ -46,6 +46,7 @@ targets:
       - { path: ../settings.js, buildPhase: resources }
       - { path: ../hide.js, buildPhase: resources }
       - { path: ../mediasession.js, buildPhase: resources }
+      - { path: ../splash.js, buildPhase: resources }
       - { path: ../channels.yaml, buildPhase: resources }
     dependencies:
       - package: TVCore
@@ -85,6 +86,7 @@ targets:
       - { path: ../settings.js, buildPhase: resources }
       - { path: ../hide.js, buildPhase: resources }
       - { path: ../mediasession.js, buildPhase: resources }
+      - { path: ../splash.js, buildPhase: resources }
       - { path: ../channels.yaml, buildPhase: resources }
     dependencies:
       - package: TVCore
